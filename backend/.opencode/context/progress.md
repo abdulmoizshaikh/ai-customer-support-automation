@@ -54,6 +54,7 @@
 - [x] Phase 8 `TICKET_RESOLVED` finalStatus is always recorded when the workflow finishes (Phase 7 behavior preserved); for WAITING_APPROVAL tickets that fires with `finalStatus: WAITING_APPROVAL` at creation and then again after the human decision
 - [x] Part 2 verification (literal output): login agent → `200`; `POST /tickets` (order 123) → `201` `decision.action: "REQUEST_HUMAN_APPROVAL"`, `ticket.status: "WAITING_APPROVAL"`, `approval.id` captured; `GET /approvals?status=PENDING` (Bearer) → `200` includes the new approval (+1 lingering Phase 7 PENDING row for order 123); `POST /approvals/:id/approve` (no token) → `401 Missing access token`; with token → `201` `approval.status: APPROVED`, `refund.status: COMPLETED`, `ticket.status: RESOLVED`; `GET /orders/123` → `200` `status: "REFUNDED"`, `refundedAt` non-null; `GET /tickets/:id` trace ends `APPROVAL_APPROVED → ORDER_STATUS_TRANSITIONED → TICKET_RESOLVED (via=human-approval)`; re-approve same id → `400 {"message":"Approval already resolved"}`; re-submitted order-123 ticket → `201` `decision.action: "REJECT_REFUND"` / `reason: "ORDER_ALREADY_REFUNDED"`
 - [x] `npm run build` passes (exit 0); unit tests pass (Vitest — **54 cases across 7 files** = 44 + 4 decision wrinkle + 6 approvals); lint clean (only 2 pre-existing `src/orders/` warnings); `prisma migrate status` → 4 migrations, up to date
+- [x] **Phase 9 prep — `processTicket` restructured to keep DB transactions short.** LLM classification, RAG retrieval, and AI response generation now run **outside** any transaction; DB transactions (default 5s interactive timeout) wrap only write-side effects and are sub-second. Verified with real Ollama (`AI_PROVIDER=openai`, qwen2.5:7b): a ~57s cold-start request completed — **zero** `expired transaction` errors, versus the pre-refactor `Transaction API error ... 27349 ms passed` under the old single 60s-bumped transaction. Mock verification (order 456 → `AUTO_REFUND`): 9-event audit trace preserved in order. Tests still **54/54**; `.env` left restored to `mock`
 
 ### Pending / Phase 3 follow-up
 
@@ -87,6 +88,17 @@
 - `@Public()` and `@Roles` must never coexist on the same route: JwtAuthGuard is bypassed by `@Public()` but RolesGuard still runs and would 403 every request (no `request.user`).
 - `ApprovalRequest.decidedById` is a `User` FK (cuid), so `approve/reject` look up the decider by the JWT email and store the user id; the email goes into audit metadata.
 - Prisma model is `ApprovalRequest` (not `approval`); list uses `prisma.approvalRequest.findMany`.
+- **`TicketService.processTicket` was restructured (Phase 9 prep) to keep DB transactions short.** LLM classification, RAG retrieval, and response generation now run **outside** any transaction. DB transactions only wrap write-side effects, each sub-second.
+
+  Before: single transaction wrapping the whole workflow. Failed with real Ollama after 27s due to Prisma's 5s interactive transaction timeout.
+
+  After: phase-split — create ticket (short tx) → classify (no tx) → RAG (no tx) → order lookup (no tx) → decision (no tx) → side effects (short tx) → response generation (no tx) → final writes (short tx).
+
+  Failure path: if any non-DB phase fails, the ticket is marked `FAILED` and audit `TICKET_FAILED` recorded in its own short transaction; the error is returned in the `ProcessResult` (same return-not-rethrow contract as before).
+
+  Recovery: `GET /tickets/:id` shows the `FAILED` ticket with any committed side effects in the audit log. Phase 9 hardening item: a retry endpoint (or background reconciliation) that re-runs the late phases for `FAILED` tickets without re-creating side effects (idempotent by `ticketId`).
+
+  This keeps DB locks off the LLM latency path and is the correct shape for production. New audit event `TICKET_FAILED` fires only on failure; success trace adds `ORDER_STATUS_TRANSITIONED` (Phase 8), making the AUTO_REFUND path 9 events.
 
 ## Next Step
 

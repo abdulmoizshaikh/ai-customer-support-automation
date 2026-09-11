@@ -21,6 +21,7 @@ function orderFixture(id: string, amount: number, deliveredDaysAgo: number) {
     deliveredAt: daysAgo(deliveredDaysAgo),
     createdAt: new Date(),
     updatedAt: new Date(),
+    refunds: [] as { status: string }[],
   };
 }
 
@@ -47,16 +48,26 @@ interface MockContext {
 
 function createContext(): MockContext {
   const refundsByTicket = new Map<string, { id: string; status: string }>();
+  const tickets = new Map<string, Record<string, unknown>>();
+  const orderFindUnique = vi.fn();
 
   const tx = {
     ticket: {
-      create: vi.fn(),
-      update: vi.fn(async ({ where, data }: never) => ({
-        id: where.id,
-        ...data,
-      })),
+      create: vi.fn(async ({ data }: never) => {
+        const ticket = { id: 'ticket-1', ...data };
+        tickets.set(ticket.id, ticket);
+        return ticket;
+      }),
+      update: vi.fn(async ({ where, data }: never) => {
+        const updated = {
+          ...(tickets.get(where.id) ?? { id: where.id }),
+          ...data,
+        };
+        tickets.set(where.id, updated);
+        return updated;
+      }),
     },
-    order: { findUnique: vi.fn(), update: vi.fn() },
+    order: { findUnique: orderFindUnique, update: vi.fn() },
     refund: {
       findUnique: vi.fn(
         ({ where }: never) => refundsByTicket.get(where.ticketId) ?? null,
@@ -78,12 +89,21 @@ function createContext(): MockContext {
 
   const prisma = {
     ticket: {
-      create: vi.fn(async ({ data }: never) => ({ id: 'ticket-1', ...data })),
-      update: vi.fn(async ({ where, data }: never) => ({
-        id: where.id,
-        ...data,
-      })),
+      create: vi.fn(async ({ data }: never) => {
+        const ticket = { id: 'ticket-1', ...data };
+        tickets.set(ticket.id, ticket);
+        return ticket;
+      }),
+      update: vi.fn(async ({ where, data }: never) => {
+        const updated = {
+          ...(tickets.get(where.id) ?? { id: where.id }),
+          ...data,
+        };
+        tickets.set(where.id, updated);
+        return updated;
+      }),
     },
+    order: { findUnique: orderFindUnique },
     $transaction: vi.fn(async (cb: never) => cb(tx)),
   } as unknown as PrismaService;
 
