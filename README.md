@@ -510,6 +510,66 @@ npm run start:dev
 # 4. Submit a ticket — expect 15-30s (real inference)
 ```
 
+### Docker Compose (Full Stack)
+
+Runs PostgreSQL, the backend, and the frontend in containers.
+
+**Prerequisites:**
+
+- Docker + Docker Compose v2
+- (Optional, for real LLM) Ollama running on the host
+
+**Steps:**
+
+```bash
+# 1. Create your .env from the example
+cp .env.example .env
+# Edit .env if you want real LLM (AI_PROVIDER=openai) or changed secrets
+
+# 2. Build and start the full stack
+docker compose up --build
+
+# 3. Open the dashboard
+open http://localhost:5173
+# Backend API: http://localhost:3000
+```
+
+**Stopping:**
+
+```bash
+docker compose down          # stop and remove containers
+docker compose down -v       # ALSO remove the database volume (destructive)
+```
+
+**Rebuilding after code changes:**
+
+```bash
+docker compose up --build
+```
+
+**Logs:**
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f postgres
+```
+
+**Notes:**
+
+- Migrations and seed run automatically on backend startup.
+- Ollama must run on the host (not in a container). The backend reaches it via `host.docker.internal:11434`.
+- The database volume (`backend_postgres_data`) persists across restarts.
+- To reset the database: `docker compose down -v` then `docker compose up --build`.
+
+**Local dev still works** without Docker for the app:
+
+```bash
+docker compose up postgres   # only the database
+cd backend && npm run start:dev
+cd frontend && npm run dev
+```
+
 ---
 
 ## Configuration

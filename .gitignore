@@ -1,0 +1,4 @@
+# Compose-level environment (never commit secrets)
+.env
+.env.*
+!.env.example
