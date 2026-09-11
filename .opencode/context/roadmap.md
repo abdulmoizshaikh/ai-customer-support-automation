@@ -37,12 +37,13 @@
 - [x] Implement retrieval
 - [ ] Add context to LLM (Phase 6/7 wiring)
 
-## Phase 6 — AI Decision Engine
+## Phase 6 — AI Decision Engine ✅
 
-- [ ] Define actions
-- [ ] Validate AI decisions
+- [x] Define actions — `DecisionAction` / `DecisionReason` contract (`src/decision/types.ts`)
+- [x] Validate AI decisions — pure `evaluateDecision` (intent/confidence/delivered/window/amount gates)
 - [ ] Implement tool calling
 - [ ] Add safety rules
+- [x] DecisionModule wired (no controller — exposed via ticket workflow in Phase 7)
 
 ## Phase 7 — Automation
 

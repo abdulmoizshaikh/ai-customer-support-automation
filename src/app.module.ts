@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { EmbeddingsModule } from './embeddings/embeddings.module.js';
 import { RagModule } from './rag/rag.module.js';
+import { DecisionModule } from './decision/decision.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -32,6 +33,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AiModule,
     EmbeddingsModule,
     RagModule,
+    DecisionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

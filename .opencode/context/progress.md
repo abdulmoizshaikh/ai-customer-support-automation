@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-**Phases 1–5 complete; Phases 6–9 pending**
+**Phases 1–6 complete; Phases 7–9 pending**
 
 ### Completed
 
@@ -12,8 +12,8 @@
 - [x] Prisma 7 stable + driver adapter (`@prisma/adapter-pg` / `PrismaPg`), classic `schema.prisma`
 - [x] 10-table schema + migrations applied (`init`, `knowledge_filename_unique`, `reconcile_embedding_dims_768`)
 - [x] Seed data loaded — 3 customers, 5 orders (123/124/125, 456, 789), 2 staff users (admin + agent), 3 knowledge docs
-- [x] `CustomersModule`, `OrdersModule`, `RefundsModule`, `UsersModule`, `AuthModule`, `PrismaModule`, `EmbeddingsModule`, `RagModule` all wired into `AppModule`
-- [x] `npm run build` passes (exit 0); unit tests pass (Vitest — 22 cases across 4 files)
+- [x] `CustomersModule`, `OrdersModule`, `RefundsModule`, `UsersModule`, `AuthModule`, `PrismaModule`, `EmbeddingsModule`, `RagModule`, `DecisionModule` all wired into `AppModule`
+- [x] `npm run build` passes (exit 0); unit tests pass (Vitest — 38 cases across 5 files)
 - [x] End-to-end verification of `/orders/:id` (literal curl output):
   - `GET /orders/123` → `200` body `amount: "750"`
   - `GET /orders/789` → `200` body `amount: "2500"`
@@ -33,12 +33,18 @@
   - `docker exec ... SELECT filename, COUNT(*) ... GROUP BY filename` → exactly 1 `refund-policy.md` (total docs unchanged: 3)
   - `docker exec ... SELECT COUNT(*) FROM "KnowledgeChunk"` → `1`
   - `GET /knowledge/search?q=damaged order refund&topK=3` → `200` `[{...,"title":"Refund Policy","filename":"refund-policy.md","score":0.3726...}]`
+- [x] Decision engine `DecisionModule` (`src/decision/`) — pure, dependency-free `evaluateDecision` (no Prisma/HTTP/AI): intent gate → confidence gate → order lookup → delivered check → refund window → amount threshold → AUTO_REFUND / REQUEST_HUMAN_APPROVAL / REJECT_REFUND / ORDER_NOT_FOUND / NEEDS_HUMAN_REVIEW / NO_ACTION. `DecisionService` thin wrapper (env policy or override). Scenario-table unit tests (16 cases) cover boundary rules (exactly at 30 days/500/0.85 vs ±1 unit) and gate ordering; **38 tests total pass** across 5 files
 
 ### Pending / Phase 3 follow-up
 
 - [ ] Register `JwtAuthGuard` globally via `APP_GUARD` in `AuthModule`, with a `@Public()` decorator opt-out for `/auth/login` and `/auth/register`.
 - [ ] Register `RolesGuard` globally after `JwtAuthGuard` so `@Roles(...)` metadata is actually enforced.
 - [ ] Verify `GET /orders/:id` returns 401 without a JWT once guards are live, then re-verify with a JWT from `POST /auth/login`.
+
+### Config hygiene (deferred)
+
+- [ ] `REFUND_AUTO_LIMIT` is currently read by **no code** — candidate for removal once Phase 7 confirms the ticket workflow reads only `AUTO_REFUND_THRESHOLD`.
+- [ ] Re-verify at the end of Phase 7 that no config consumer reads the legacy var.
 
 ### Key technical decisions
 
@@ -50,7 +56,8 @@
 - RAG embedding dimension reconciled to **768** (`nomic-embed-text`); `KnowledgeChunk.embedding` is `Unsupported("vector(768)")`, seeded `KnowledgeDocument`s (no chunks) left untouched.
 - `POST /knowledge` is **idempotent by filename** (replaces doc + cascaded chunks in a transaction) — documented contract in `RagService.ingestDocument`.
 - Mock embedding provider uses **token-hash bag-of-words** (deterministic, normalized) so related content gets positive cosine scores — deviate from the original pseudo-random spec to satisfy `score > 0` verification; all 5 mock provider tests unchanged.
+- Decision engine reads `AUTO_REFUND_THRESHOLD` (now in `.env`); legacy `REFUND_AUTO_LIMIT` left in place — see "Config hygiene (deferred)".
 
 ## Next Step
 
-Phase 6 — AI Decision Engine (define actions, validate AI decisions, tool calling, safety rules). Phase 4 follow-ups (support-ticket API, live LLM verify) remain open.
+Phase 7 — Automation (automatic refund, automatic response, human escalation, audit logging) + wire the ticket workflow (AI classify → RAG retrieval → decision engine → action). Phase 4 follow-ups (support-ticket API, live LLM verify) remain open.
