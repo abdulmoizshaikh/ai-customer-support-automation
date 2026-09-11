@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-support-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ai_support
+      POSTGRES_PASSWORD: ai_support
+      POSTGRES_DB: ai_support
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_support -d ai_support"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

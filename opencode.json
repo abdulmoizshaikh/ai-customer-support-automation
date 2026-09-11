@@ -6,9 +6,6 @@
       "extensions": [".ts", ".js", ".json", ".md"]
     }
   },
-  "lsp": {
-    "typescript": {}
-  },
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**", "coverage/**"]
   },

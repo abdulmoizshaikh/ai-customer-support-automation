@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CUSTOMER
+  AGENT
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum TicketStatus {
+  OPEN
+  PROCESSING
+  WAITING_APPROVAL
+  RESOLVED
+  REJECTED
+  FAILED
+}
+
+enum Intent {
+  REFUND
+  ORDER_STATUS
+  DAMAGED_ORDER
+  CANCEL_ORDER
+  TECHNICAL_ISSUE
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ApprovalType {
+  REFUND
+  CANCEL_ORDER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AuditActor {
+  AI
+  HUMAN
+  SYSTEM
+}
+
+enum KnowledgeStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Identity & Access
+// ---------------------------------------------------------------------------
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  name             String
+  passwordHash     String
+  role             Role     @default(CUSTOMER)
+  refreshTokenHash String?
+  customerId       String?  @unique
+  customer         Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  refundsApproved  Refund[] @relation("RefundApprover")
+  approvalsDecided ApprovalRequest[] @relation("ApprovalDecider")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------------
+// Customers & Orders
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  user      User?
+  orders    Order[]
+  tickets   Ticket[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Order {
+  id          String      @id // e.g. "123"
+  customerId  String
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  status      OrderStatus @default(PENDING)
+  amount      Decimal     @db.Decimal(10, 2)
+  currency    String      @default("USD")
+  deliveredAt DateTime?
+  refunds     Refund[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([customerId])
+}
+
+// ---------------------------------------------------------------------------
+// Support workflow
+// ---------------------------------------------------------------------------
+
+model Ticket {
+  id              String                @id @default(cuid())
+  customerId      String?
+  customer        Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  message         String
+  source          String                @default("api")
+  intent          Intent?
+  priority        Priority?
+  confidence      Float?
+  orderId         String?
+  aiResponse      String?
+  aiMetadata      Json?
+  status          TicketStatus          @default(OPEN)
+  refund          Refund?
+  approvalRequest ApprovalRequest?
+  auditLogs       AuditLog[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model Refund {
+  id           String       @id @default(cuid())
+  ticketId     String       @unique // idempotency: one refund per ticket
+  ticket       Ticket       @relation(fields: [ticketId], references: [id])
+  orderId      String
+  order        Order        @relation(fields: [orderId], references: [id])
+  amount       Decimal      @db.Decimal(10, 2)
+  currency     String       @default("USD")
+  status       RefundStatus @default(PENDING)
+  reason       String
+  approvedById String?
+  approvedBy   User?        @relation("RefundApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([orderId])
+}
+
+model ApprovalRequest {
+  id          String         @id @default(cuid())
+  ticketId    String         @unique
+  ticket      Ticket         @relation(fields: [ticketId], references: [id])
+  type        ApprovalType
+  amount      Decimal?       @db.Decimal(10, 2)
+  reason      String
+  status      ApprovalStatus @default(PENDING)
+  decidedById String?
+  decidedBy   User?          @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([status])
+}
+
+model AuditLog {
+  id        String     @id @default(cuid())
+  ticketId  String?
+  ticket    Ticket?    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  event     String
+  actor     AuditActor
+  actorId   String?
+  metadata  Json?
+  createdAt DateTime   @default(now())
+
+  @@index([ticketId])
+  @@index([event])
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge base (RAG)
+// ---------------------------------------------------------------------------
+
+model KnowledgeDocument {
+  id        String            @id @default(cuid())
+  title     String
+  filename  String   @unique
+  content   String
+  status    KnowledgeStatus   @default(PROCESSING)
+  chunks    KnowledgeChunk[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model KnowledgeChunk {
+  id         String            @id @default(cuid())
+  documentId String
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  index      Int
+  content    String
+  // pgvector dimension (OpenAI compatible default: 1536).
+  // Managed via raw SQL (see migrations) — not via native Prisma vector support.
+  embedding  Unsupported("vector(1536)")?
+  createdAt  DateTime          @default(now())
+
+  @@index([documentId])
+}
