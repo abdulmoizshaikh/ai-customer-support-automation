@@ -6,7 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { envConfig } from '../common/config.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -63,9 +63,12 @@ export class AuthService {
   async refresh(refreshToken: string): Promise<AuthTokens> {
     let payload: { sub: string };
     try {
-      payload = await this.jwtService.verifyAsync<{ sub: string }>(refreshToken, {
-        secret: envConfig.jwt.refreshSecret,
-      });
+      payload = await this.jwtService.verifyAsync<{ sub: string }>(
+        refreshToken,
+        {
+          secret: envConfig.jwt.refreshSecret,
+        },
+      );
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
@@ -84,7 +87,10 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
-  async logout(refreshToken: string | undefined, userId: string): Promise<void> {
+  async logout(
+    refreshToken: string | undefined,
+    userId: string,
+  ): Promise<void> {
     if (!refreshToken) {
       await this.prisma.user.update({
         where: { id: userId },

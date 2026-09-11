@@ -7,10 +7,8 @@ import {
   Post,
 } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator.js';
-import {
-  CurrentUser,
-  AuthUser,
-} from '../common/decorators/current-user.decorator.js';
+import { CurrentUser } from '../common/decorators/current-user.decorator.js';
+import type { AuthUser } from '../common/decorators/current-user.decorator.js';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -43,10 +41,7 @@ export class AuthController {
 
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('logout')
-  logout(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: LogoutDto,
-  ): Promise<void> {
+  logout(@CurrentUser() user: AuthUser, @Body() dto: LogoutDto): Promise<void> {
     return this.authService.logout(dto.refreshToken, user.sub);
   }
 

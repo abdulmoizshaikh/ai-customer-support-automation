@@ -25,5 +25,5 @@ export class CreateUserDto {
   password!: string;
 
   @IsEnum(Role)
-  role!: Exclude<Role, Role.CUSTOMER>;
+  role!: Exclude<Role, 'CUSTOMER'>;
 }

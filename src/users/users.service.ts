@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
@@ -39,11 +39,11 @@ export class UsersService {
     }
   }
 
-  findAll(): Promise<SafeUser[]> {
-    return this.prisma.user.findMany({
+  async findAll(): Promise<SafeUser[]> {
+    const users = await this.prisma.user.findMany({
       orderBy: { createdAt: 'asc' },
-      select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true },
     });
+    return users.map((user) => this.safeUser(user));
   }
 
   async findOne(id: string): Promise<SafeUser> {
@@ -57,7 +57,9 @@ export class UsersService {
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.email !== undefined && { email: dto.email }),
       ...(dto.role !== undefined && { role: dto.role }),
-      ...(dto.password && { passwordHash: await bcrypt.hash(dto.password, 10) }),
+      ...(dto.password && {
+        passwordHash: await bcrypt.hash(dto.password, 10),
+      }),
     };
     const user = await this.prisma.user.update({ where: { id }, data });
     return this.safeUser(user);

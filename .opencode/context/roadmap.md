@@ -1,56 +1,67 @@
 # Project Roadmap
 
-## Phase 1 — Foundation
+## Phase 1 — Foundation ✅
 
 - [x] Create repository
-- [x] Setup backend
-- [ ] Setup database
-- [ ] Create support ticket API
-- [ ] Create customer/order models
+- [x] Setup backend — NestJS 12, TypeScript 6, ESM
+- [x] Setup database — PostgreSQL 16 via Docker Compose (`pgvector/pgvector:pg16`, container `ai-support-postgres`)
+- [x] Define schema (`prisma/schema.prisma`, 10 tables) + apply migrations (`init`, `knowledge_filename_unique`)
+- [x] Seed database (3 customers, 5 orders, 2 staff users, 3 knowledge docs)
+- [x] Observability (NestJS Observe), lint (oxlint), format (Prettier), tests (Vitest)
 
-## Phase 2 — AI Classification
+## Phase 2 — Business Data & API ✅
 
-- [ ] Connect local LLM
-- [ ] Define ticket categories
-- [ ] Implement structured classification
-- [ ] Add confidence score
+- [x] Customer model + CRUD API (`/customers`)
+- [x] Order model + CRUD API (`/orders`, `GET /orders/:id` verified)
+- [x] Refund model + API (`/refunds`, fake provider, idempotent per ticket)
+- [x] User model + admin CRUD API (`/users`, bcrypt-hashed passwords)
+- [x] DTO validation (class-validator) + PrismaModule/Service (driver adapter `PrismaPg`)
 
-## Phase 3 — RAG
+## Phase 3 — Auth Foundation ✅ (follow-ups pending)
 
-- [ ] Create knowledge documents
-- [ ] Chunk documents
-- [ ] Generate embeddings
+- [x] JWT auth module (`/auth`: register, login, refresh, logout, me)
+- [x] Refresh-token rotation (hash stored, never the raw token)
+- [x] `@Public()` and `@CurrentUser()` decorators
+
+## Phase 4 — Support Tickets & AI Classification
+
+- [ ] Support ticket API
+- [ ] Connect local LLM (mock provider primed, `AI_PROVIDER=mock`)
+- [ ] Define ticket categories / intent detection
+- [ ] Structured classification + confidence score
+
+## Phase 5 — RAG
+
+- [ ] Chunk knowledge documents (schema + seed present)
+- [ ] Generate embeddings (pgvector column exists via raw SQL)
 - [ ] Store vectors
 - [ ] Implement retrieval
 - [ ] Add context to LLM
 
-## Phase 4 — Business Data
-
-- [ ] Customer lookup
-- [ ] Order lookup
-- [ ] Order status
-- [ ] Refund eligibility
-
-## Phase 5 — AI Decision Engine
+## Phase 6 — AI Decision Engine
 
 - [ ] Define actions
 - [ ] Validate AI decisions
 - [ ] Implement tool calling
 - [ ] Add safety rules
 
-## Phase 6 — Automation
+## Phase 7 — Automation
 
 - [ ] Automatic refund
 - [ ] Automatic response
 - [ ] Human escalation
 - [ ] Audit logging
 
-## Phase 7 — Production Quality
+## Phase 8 — Business Rules
 
-- [ ] Error handling
+- [ ] Refund eligibility (limits/window already configurable in `.env`)
+- [ ] Order status transitions
+- [ ] Approval workflow (schema present)
+
+## Phase 9 — Production Quality
+
+- [ ] Error handling hardening
 - [ ] Retry handling
-- [ ] Observability
-- [ ] Authentication
+- [ ] Authentication guards live (see progress.md follow-ups)
 - [ ] Rate limiting
-- [ ] Tests
-- [ ] Docker
+- [ ] Dockerized app (only DB via Docker today)

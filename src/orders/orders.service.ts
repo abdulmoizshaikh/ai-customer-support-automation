@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
@@ -15,10 +15,7 @@ export class OrdersService {
 
   create(dto: CreateOrderDto) {
     return this.prisma.order.create({ data: dto }).catch((e: unknown) => {
-      if (
-        e instanceof PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException(`Order ${dto.id} already exists`);
       }
       if (e instanceof PrismaClientKnownRequestError && e.code === 'P2003') {
