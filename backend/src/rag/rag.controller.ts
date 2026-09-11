@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Public } from '../common/decorators/public.decorator.js';
 import { RagService } from './rag.service.js';
 import { IngestDocumentDto } from './dto/ingest-document.dto.js';
 
 @Controller('knowledge')
+@Public() // public: dev/test knowledge-base endpoint
 export class RagController {
   constructor(private readonly rag: RagService) {}
 

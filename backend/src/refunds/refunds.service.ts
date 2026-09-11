@@ -8,6 +8,16 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateRefundDto } from './dto/create-refund.dto.js';
 
+export interface RefundRecord {
+  id: string;
+  ticketId: string;
+  orderId: string;
+  amount: unknown;
+  currency: string;
+  status: string;
+  reason: string;
+}
+
 /**
  * Fake refund provider. In a real system this would call a payment provider.
  * Refunds are idempotent: one ticket one refund (unique constraint on ticketId).
@@ -22,37 +32,65 @@ export class RefundsService {
   }
 
   async create(dto: CreateRefundDto) {
-    const existing = await this.findByTicketId(dto.ticketId);
+    return this.createForTicket(
+      dto.ticketId,
+      dto.orderId,
+      dto.amount,
+      dto.reason,
+    );
+  }
+
+  /**
+   * Programmatic refund for a ticket, optionally inside an interactive
+   * transaction (`db` sink, mirroring AuditService). Once the refund reaches
+   * COMPLETED the order is transitioned to REFUNDED with `refundedAt`.
+   */
+  async createForTicket(
+    ticketId: string,
+    orderId: string,
+    amount?: number,
+    reason?: string,
+    db: unknown = this.prisma,
+  ): Promise<RefundRecord> {
+    const client = db as RefundDb;
+
+    const existing = (await client.refund.findUnique({
+      where: { ticketId },
+    })) as RefundRecord | null;
     if (existing) {
       return existing;
     }
 
-    const order = await this.prisma.order.findUnique({
-      where: { id: dto.orderId },
-    });
+    const order = (await client.order.findUnique({
+      where: { id: orderId },
+    })) as {
+      id: string;
+      amount: { toString(): string } | number;
+      currency: string;
+    } | null;
     if (!order) {
-      throw new NotFoundException(`Order ${dto.orderId} not found`);
+      throw new NotFoundException(`Order ${orderId} not found`);
     }
 
-    const amount = dto.amount ?? Number(order.amount);
-    const reason = dto.reason ?? 'Automated refund';
+    const finalAmount = amount ?? Number(order.amount);
+    const finalReason = reason ?? 'Automated refund';
 
     try {
-      const refund = await this.prisma.refund.create({
+      const refund = (await client.refund.create({
         data: {
-          ticketId: dto.ticketId,
+          ticketId,
           orderId: order.id,
-          amount,
+          amount: finalAmount,
           currency: order.currency,
-          reason,
+          reason: finalReason,
           status: RefundStatus.COMPLETED,
         },
-      });
+      })) as RefundRecord;
 
       // Simulate the external provider having settled the refund.
-      await this.prisma.order.update({
+      await client.order.update({
         where: { id: order.id },
-        data: { status: 'REFUNDED' },
+        data: { status: 'REFUNDED', refundedAt: new Date() },
       });
 
       return refund;
@@ -62,7 +100,7 @@ export class RefundsService {
         error.code === 'P2003'
       ) {
         throw new BadRequestException(
-          `Referenced ticket or order does not exist (ticketId=${dto.ticketId}, orderId=${dto.orderId})`,
+          `Referenced ticket or order does not exist (ticketId=${ticketId}, orderId=${orderId})`,
         );
       }
       throw error;
@@ -87,3 +125,22 @@ export class RefundsService {
     return refund;
   }
 }
+
+/**
+ * Minimal refund sink: either the PrismaService itself or an interactive
+ * transaction client (`tx`) so refund + order update join the caller's
+ * transaction. Prisma 7 does not export a public transaction client type.
+ */
+type RefundDb = {
+  refund: {
+    findUnique: (args: { where: { ticketId: string } }) => Promise<unknown>;
+    create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+  };
+  order: {
+    findUnique: (args: { where: { id: string } }) => Promise<unknown>;
+    update: (args: {
+      where: { id: string };
+      data: { status: string; refundedAt: Date };
+    }) => Promise<unknown>;
+  };
+};

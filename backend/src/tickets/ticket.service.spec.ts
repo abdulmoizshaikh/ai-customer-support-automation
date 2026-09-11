@@ -5,6 +5,7 @@ import { AiService } from '../ai/ai.service.js';
 import { MockProvider } from '../ai/providers/mock.provider.js';
 import { RagService } from '../rag/rag.service.js';
 import { DecisionService } from '../decision/decision.service.js';
+import { RefundsService } from '../refunds/refunds.service.js';
 import { TicketService } from './ticket.service.js';
 
 const daysAgo = (days: number): Date =>
@@ -92,7 +93,8 @@ function createContext(): MockContext {
   } as unknown as RagService;
   const decision = new DecisionService();
   const audit = new AuditService({} as unknown as PrismaService);
-  const service = new TicketService(prisma, ai, rag, decision, audit);
+  const refunds = new RefundsService({} as unknown as PrismaService);
+  const service = new TicketService(prisma, ai, rag, decision, audit, refunds);
 
   return {
     service,
@@ -119,7 +121,12 @@ describe('TicketService.processTicket', () => {
     expect(result.error).toBeUndefined();
     expect(ctx.refundsByTicket.size).toBe(1);
     expect(ctx.tx.order.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { status: 'REFUNDED' } }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'REFUNDED',
+          refundedAt: expect.any(Date),
+        }),
+      }),
     );
   });
 

@@ -123,6 +123,7 @@ model Order {
   amount      Decimal     @db.Decimal(10, 2)
   currency    String      @default("USD")
   deliveredAt DateTime?
+  refundedAt  DateTime?
   refunds     Refund[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt

@@ -6,6 +6,7 @@ export interface OrderSnapshot {
   currency: string;
   status: string;
   deliveredAt: Date | null;
+  hasCompletedRefund?: boolean;
 }
 
 export interface PolicyConfig {
@@ -31,7 +32,8 @@ export type DecisionReason =
   | 'LOW_CONFIDENCE'
   | 'INTENT_NOT_REFUND'
   | 'NOT_DAMAGED'
-  | 'DIGITAL_PRODUCT_NON_REFUNDABLE';
+  | 'DIGITAL_PRODUCT_NON_REFUNDABLE'
+  | 'ORDER_ALREADY_REFUNDED';
 
 export interface DecisionInput {
   intent: Intent;

@@ -138,4 +138,42 @@ describe('evaluateDecision', () => {
     const d = evaluateDecision(input({ order: null }));
     expect(d.action).toBe('ORDER_NOT_FOUND');
   });
+
+  it('rejects refunds for orders already in refunded status', () => {
+    const d = evaluateDecision(input({ order: order({ status: 'refunded' }) }));
+    expect(d.action).toBe('REJECT_REFUND');
+    expect(d.reason).toBe('ORDER_ALREADY_REFUNDED');
+    expect(d.requiresApproval).toBe(false);
+  });
+
+  it('rejects refunds when order has a completed refund', () => {
+    const d = evaluateDecision(
+      input({ order: order({ hasCompletedRefund: true }) }),
+    );
+    expect(d.action).toBe('REJECT_REFUND');
+    expect(d.reason).toBe('ORDER_ALREADY_REFUNDED');
+  });
+
+  it('hasCompletedRefund: false keeps existing behavior', () => {
+    const d = evaluateDecision(
+      input({ order: order({ hasCompletedRefund: false }) }),
+    );
+    expect(d.action).toBe('AUTO_REFUND');
+    expect(d.reason).toBe('ELIGIBLE');
+  });
+
+  it('already-refunded check precedes window and amount gates', () => {
+    const d = evaluateDecision(
+      input({
+        order: order({
+          amount: 750,
+          status: 'delivered',
+          deliveredAt: new Date(NOW.getTime() - 45 * 24 * 60 * 60 * 1000),
+          hasCompletedRefund: true,
+        }),
+      }),
+    );
+    expect(d.action).toBe('REJECT_REFUND');
+    expect(d.reason).toBe('ORDER_ALREADY_REFUNDED');
+  });
 });

@@ -5,7 +5,7 @@
 - [x] Create repository
 - [x] Setup backend — NestJS 12, TypeScript 6, ESM
 - [x] Setup database — PostgreSQL 16 via Docker Compose (`pgvector/pgvector:pg16`, container `ai-support-postgres`)
-- [x] Define schema (`prisma/schema.prisma`, 10 tables) + apply migrations (`init`, `knowledge_filename_unique`, `reconcile_embedding_dims_768`)
+- [x] Define schema (`prisma/schema.prisma`, 10 tables) + apply migrations (`init`, `knowledge_filename_unique`, `reconcile_embedding_dims_768`, `add_order_refunded_status`)
 - [x] Seed database (3 customers, 5 orders, 2 staff users, 3 knowledge docs)
 - [x] Observability (NestJS Observe), lint (oxlint), format (Prettier), tests (Vitest)
 
@@ -17,11 +17,12 @@
 - [x] User model + admin CRUD API (`/users`, bcrypt-hashed passwords)
 - [x] DTO validation (class-validator) + PrismaModule/Service (driver adapter `PrismaPg`)
 
-## Phase 3 — Auth Foundation ✅ (follow-ups pending)
+## Phase 3 — Auth Foundation ✅
 
 - [x] JWT auth module (`/auth`: register, login, refresh, logout, me)
 - [x] Refresh-token rotation (hash stored, never the raw token)
 - [x] `@Public()` and `@CurrentUser()` decorators
+- [x] Global auth guards — `JwtAuthGuard` + `RolesGuard` via `APP_GUARD` in `AuthModule`; `@Public()` opt-outs live; curl-verified
 
 ## Phase 4 — Support Tickets & AI Classification
 
@@ -52,16 +53,16 @@
 - [x] Human escalation
 - [x] Audit logging
 
-## Phase 8 — Business Rules
+## Phase 8 — Business Rules ✅
 
-- [ ] Refund eligibility (limits/window already configurable in `.env`)
-- [ ] Order status transitions
-- [ ] Approval workflow (schema present)
+- [x] Refund eligibility (limits/window configurable in `.env`; `hasCompletedRefund` + already-refunded wrinkle)
+- [x] Order status transitions (`REFUNDED` + `refundedAt`)
+- [x] Approval workflow (`/approvals` list/approve/reject, schema present)
 
 ## Phase 9 — Production Quality
 
 - [ ] Error handling hardening
 - [ ] Retry handling
-- [ ] Authentication guards live (see progress.md follow-ups)
+- [x] Authentication guards live (`JwtAuthGuard` + `RolesGuard` via `APP_GUARD`, `@Public()` opt-outs)
 - [ ] Rate limiting
 - [ ] Dockerized app (only DB via Docker today)

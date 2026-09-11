@@ -41,6 +41,16 @@ export function evaluateDecision(input: DecisionInput): Decision {
     };
   }
 
+  if (order.status.toLowerCase() === 'refunded' || order.hasCompletedRefund) {
+    return {
+      action: 'REJECT_REFUND',
+      reason: 'ORDER_ALREADY_REFUNDED',
+      amount: order.amount,
+      requiresApproval: false,
+      notes: ['Order has already been refunded.'],
+    };
+  }
+
   if (order.status !== 'delivered' || !order.deliveredAt) {
     return {
       action: 'REJECT_REFUND',

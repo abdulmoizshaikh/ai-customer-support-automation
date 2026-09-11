@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-**Phases 1–7 complete; Phases 8–9 pending**
+**Phases 1–8 complete; Phase 9 pending**
 
 ### Completed
 
@@ -10,9 +10,9 @@
 - [x] Backend scaffolded — NestJS 12, TypeScript 6, ESM
 - [x] Database — PostgreSQL 16 via Docker Compose (`pgvector/pgvector:pg16`, container `ai-support-postgres`, volume `backend_postgres_data`)
 - [x] Prisma 7 stable + driver adapter (`@prisma/adapter-pg` / `PrismaPg`), classic `schema.prisma`
-- [x] 10-table schema + migrations applied (`init`, `knowledge_filename_unique`, `reconcile_embedding_dims_768`)
+- [x] 10-table schema + migrations applied (`init`, `knowledge_filename_unique`, `reconcile_embedding_dims_768`, `add_order_refunded_status`)
 - [x] Seed data loaded — 3 customers, 5 orders (123/124/125, 456, 789), 2 staff users (admin + agent), 3 knowledge docs
-- [x] `CustomersModule`, `OrdersModule`, `RefundsModule`, `UsersModule`, `AuthModule`, `PrismaModule`, `EmbeddingsModule`, `RagModule`, `DecisionModule`, `AuditModule`, `TicketModule` all wired into `AppModule`
+- [x] `CustomersModule`, `OrdersModule`, `RefundsModule`, `UsersModule`, `AuthModule`, `PrismaModule`, `EmbeddingsModule`, `RagModule`, `DecisionModule`, `AuditModule`, `TicketModule`, `ApprovalsModule` all wired into `AppModule`
 - [x] `npm run build` passes (exit 0); unit tests pass (Vitest — 38 cases across 5 files)
 - [x] End-to-end verification of `/orders/:id` (literal curl output):
   - `GET /orders/123` → `200` body `amount: "750"`
@@ -46,12 +46,20 @@
   - `GET /tickets/:id` trace (auditLogs asc): `TICKET_CREATED → AI_CLASSIFICATION → RAG_RETRIEVED → ORDER_LOOKED_UP → DECISION_MADE → REFUND_CREATED → RESPONSE_GENERATED → TICKET_RESOLVED`
   - DB: exactly 1 `Refund` (order 124, COMPLETED), exactly 1 `ApprovalRequest` (order 123, REFUND/PENDING, 750.00), 5 tickets, 37 audit rows
 - [x] `npm run build` passes (exit 0); unit tests pass (Vitest — **44 cases across 6 files**, +6 `ticket.service.spec` scenarios); lint clean (only 2 pre-existing `src/orders/` warnings)
+- [x] **Phase 3 cleanup — global auth guards live.** `JwtAuthGuard` + `RolesGuard` registered via `APP_GUARD` in `AuthModule` (JwtAuthGuard first — populates `request.user`; RolesGuard second — reads `request.user.role`). `@Public()` already existed and was honored by `JwtAuthGuard` (Reflector `getAllAndOverride` of `IS_PUBLIC_KEY`). `@Roles(...)` decorators everywhere are now **enforced**. `@Public()` added class-level to `AiController` (`/ai/classify`), `RagController` (`/knowledge`), `TicketController` (`/tickets`), and method-level to `AppController.getHello` (root health). **Not** added to `CustomersController`/`OrdersController`/`RefundsController` — they already declare class-level `@Roles(AGENT, ADMIN)`; `@Public()` there would have turned them always-403 (JwtAuthGuard bypassed, RolesGuard still runs with no user). `AuthController` already had `@Public()` on register/login/refresh; `me`/`logout` stay protected. `UsersController` unchanged (ADMIN/AGENT gates)
+- [x] Part 1 verification (literal output): `GET /orders/123` (no token) → `401 {"message":"Missing access token","error":"Unauthorized","statusCode":401}`; `POST /auth/login` (agent) → `200 { user, tokens: { accessToken, refreshToken } }`; `GET /orders/123` (Bearer agent token) → `200 {id:"123", status:"DELIVERED", amount:"750", ...}`; `POST /tickets` (no token) → `201` (public)
+- [x] **Phase 8 — order status transitions.** `refundedAt DateTime?` added to `Order` (migration `add_order_refunded_status`, only column add — `OrderStatus.REFUNDED` already existed). `RefundsService.createForTicket(ticketId, orderId, amount?, reason?, db?)` extracted (idempotent `findUnique`-then-create, `RefundStatus.COMPLETED`, then `order.update { status: 'REFUNDED', refundedAt: new Date() }`); `create(dto)` delegates to it; shared by `TicketService` (AUTO_REFUND branch) and `ApprovalsService`. Optional `db` sink mirrors `AuditService.record` so calls join the caller's `$transaction`
+- [x] **Phase 8 — refund eligibility wrinkles.** `OrderSnapshot.hasCompletedRefund?: boolean` + reason `ORDER_ALREADY_REFUNDED`; `evaluateDecision` now rejects BEFORE the delivered/window/amount gates when `order.status.toLowerCase() === 'refunded'` **or** `hasCompletedRefund` (normalized lowercase, matching the existing delivered-check). `TicketService` fetches orders with `include: { refunds: { select: { status: true } } }` and passes `hasCompletedRefund: !!(order.refunds?.some(r => r.status === 'COMPLETED'))`
+- [x] **Phase 8 — approval workflow.** `ApprovalsModule` (`src/approvals/`): `GET /approvals?status=` (list, status whitelist → 400), `POST /approvals/:id/approve`, `POST /approvals/:id/reject`; class-level `@Roles(AGENT, ADMIN)` — now really enforced. `approve`: load → PENDING check (`400 'Approval already resolved'`) → `$transaction`: `approvalRequest.update` (APPROVED, `decidedById`/`decidedAt`) → load ticket + order → `RefundsService.createForTicket(..., tx)` → `ticket.update` RESOLVED → audits `APPROVAL_APPROVED` (agent, `{approvedBy, refundId, amount}`), `ORDER_STATUS_TRANSITIONED` (system, `{orderId, from, to: 'REFUNDED'}`), `TICKET_RESOLVED` (system, `{finalStatus: 'RESOLVED', via: 'human-approval'}`). `reject`: same skeleton → REJECTED + ticket RESOLVED + audits `APPROVAL_REJECTED` (agent, `{rejectedBy, reason}`) and `TICKET_RESOLVED` (system, `{finalStatus: 'RESOLVED', via: 'human-rejection'}`). Note: TicketStatus has no REJECTED value; rejections resolve the ticket and record via='human-rejection' in the audit log
+- [x] Phase 8 `TICKET_RESOLVED` finalStatus is always recorded when the workflow finishes (Phase 7 behavior preserved); for WAITING_APPROVAL tickets that fires with `finalStatus: WAITING_APPROVAL` at creation and then again after the human decision
+- [x] Part 2 verification (literal output): login agent → `200`; `POST /tickets` (order 123) → `201` `decision.action: "REQUEST_HUMAN_APPROVAL"`, `ticket.status: "WAITING_APPROVAL"`, `approval.id` captured; `GET /approvals?status=PENDING` (Bearer) → `200` includes the new approval (+1 lingering Phase 7 PENDING row for order 123); `POST /approvals/:id/approve` (no token) → `401 Missing access token`; with token → `201` `approval.status: APPROVED`, `refund.status: COMPLETED`, `ticket.status: RESOLVED`; `GET /orders/123` → `200` `status: "REFUNDED"`, `refundedAt` non-null; `GET /tickets/:id` trace ends `APPROVAL_APPROVED → ORDER_STATUS_TRANSITIONED → TICKET_RESOLVED (via=human-approval)`; re-approve same id → `400 {"message":"Approval already resolved"}`; re-submitted order-123 ticket → `201` `decision.action: "REJECT_REFUND"` / `reason: "ORDER_ALREADY_REFUNDED"`
+- [x] `npm run build` passes (exit 0); unit tests pass (Vitest — **54 cases across 7 files** = 44 + 4 decision wrinkle + 6 approvals); lint clean (only 2 pre-existing `src/orders/` warnings); `prisma migrate status` → 4 migrations, up to date
 
 ### Pending / Phase 3 follow-up
 
-- [ ] Register `JwtAuthGuard` globally via `APP_GUARD` in `AuthModule`, with a `@Public()` decorator opt-out for `/auth/login` and `/auth/register`.
-- [ ] Register `RolesGuard` globally after `JwtAuthGuard` so `@Roles(...)` metadata is actually enforced.
-- [ ] Verify `GET /orders/:id` returns 401 without a JWT once guards are live, then re-verify with a JWT from `POST /auth/login`.
+- [x] Register `JwtAuthGuard` globally via `APP_GUARD` in `AuthModule`, with a `@Public()` decorator opt-out for `/auth/login` and `/auth/register`.
+- [x] Register `RolesGuard` globally after `JwtAuthGuard` so `@Roles(...)` metadata is actually enforced.
+- [x] Verify `GET /orders/:id` returns 401 without a JWT once guards are live, then re-verify with a JWT from `POST /auth/login`.
 
 ### Config hygiene (deferred)
 
@@ -75,7 +83,11 @@
 - `processTicket` creates the ticket row **before** `$transaction` (deliberate deviation from the task snippet) so a rolled-back workflow can still persist `status: FAILED`; audit `TICKET_CREATED` remains inside the tx.
 - `TicketController` result interfaces (`ProcessResult`/`RefundResult`/`ApprovalResult`/`TicketResult`) are exported because Nest/TS requires return types of controller methods to be nameable.
 - The only server-log error during Phase 7 verification is the pre-existing `ObserveAgentWorker` telemetry 401 (placeholder credentials) — not a workflow regression.
+- JwtAuthGuard checks `IS_PUBLIC_KEY` via `getAllAndOverride` (handler, then class) and verifies the JWT with `JwtService` directly (the documented pattern) rather than extending `AuthGuard('jwt')`.
+- `@Public()` and `@Roles` must never coexist on the same route: JwtAuthGuard is bypassed by `@Public()` but RolesGuard still runs and would 403 every request (no `request.user`).
+- `ApprovalRequest.decidedById` is a `User` FK (cuid), so `approve/reject` look up the decider by the JWT email and store the user id; the email goes into audit metadata.
+- Prisma model is `ApprovalRequest` (not `approval`); list uses `prisma.approvalRequest.findMany`.
 
 ## Next Step
 
-Phase 8 — Business rules (refund eligibility wrinkle checks, order status transitions, approval workflow execution: resolving PENDING approval requests). Phase 2 follow-ups (live LLM verify via `AI_CHAT_MODEL=qwen2.5:7b` + Ollama) remain open; Phase 3 auth guards (JwtAuthGuard/RolesGuard global registration + 401 verification) still pending.
+Phase 9 — Production quality (error handling hardening, retry, rate limiting, Dockerized app). Phase 2 follow-up (live LLM verify via `AI_CHAT_MODEL=qwen2.5:7b` + Ollama) remains open.

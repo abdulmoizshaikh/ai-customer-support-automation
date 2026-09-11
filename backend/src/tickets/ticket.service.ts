@@ -4,7 +4,6 @@ import {
   ApprovalType,
   Intent,
   Priority,
-  RefundStatus,
   TicketStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -12,6 +11,7 @@ import { AiService } from '../ai/ai.service.js';
 import { RagService } from '../rag/rag.service.js';
 import { DecisionService } from '../decision/decision.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { RefundsService } from '../refunds/refunds.service.js';
 import type { Decision } from '../decision/types.js';
 import type { TicketClassification } from '../ai/types/ticket-classification.js';
 
@@ -52,6 +52,7 @@ export class TicketService {
     private readonly rag: RagService,
     private readonly decisionService: DecisionService,
     private readonly audit: AuditService,
+    private readonly refunds: RefundsService,
   ) {}
 
   async processTicket(
@@ -105,6 +106,7 @@ export class TicketService {
         const order = classification.orderId
           ? await tx.order.findUnique({
               where: { id: classification.orderId },
+              include: { refunds: { select: { status: true } } },
             })
           : null;
         await this.audit.record(
@@ -132,6 +134,9 @@ export class TicketService {
                 currency: order.currency,
                 status: order.status.toLowerCase(),
                 deliveredAt: order.deliveredAt,
+                hasCompletedRefund: !!order.refunds?.some(
+                  (r) => r.status === 'COMPLETED',
+                ),
               }
             : null,
         });
@@ -153,27 +158,13 @@ export class TicketService {
         let finalStatus: TicketStatus = TicketStatus.RESOLVED;
 
         if (decision.action === 'AUTO_REFUND' && order) {
-          const existing = await tx.refund.findUnique({
-            where: { ticketId },
-          });
-          if (!existing) {
-            refund = await tx.refund.create({
-              data: {
-                ticketId,
-                orderId: order.id,
-                amount: decision.amount ?? Number(order.amount),
-                currency: order.currency,
-                reason: 'Automated refund',
-                status: RefundStatus.COMPLETED,
-              },
-            });
-            await tx.order.update({
-              where: { id: order.id },
-              data: { status: 'REFUNDED' },
-            });
-          } else {
-            refund = existing;
-          }
+          refund = await this.refunds.createForTicket(
+            ticketId,
+            order.id,
+            decision.amount ?? Number(order.amount),
+            'Automated refund',
+            tx,
+          );
           await this.audit.record(
             ticketId,
             'REFUND_CREATED',
@@ -182,6 +173,17 @@ export class TicketService {
               refundId: refund.id,
               amount: Number(refund.amount),
               status: refund.status,
+            },
+            tx,
+          );
+          await this.audit.record(
+            ticketId,
+            'ORDER_STATUS_TRANSITIONED',
+            'system',
+            {
+              orderId: order.id,
+              from: order.status,
+              to: 'REFUNDED',
             },
             tx,
           );
