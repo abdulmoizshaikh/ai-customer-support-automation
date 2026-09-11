@@ -119,7 +119,7 @@ Frontend:
 
 Before implementing a feature:
 
-1. Read relevant documentation under `docs/`.
+1. Read relevant documentation under `.opencode/context/`.
 2. Inspect existing implementation.
 3. Understand the current architecture.
 4. Avoid duplicating existing functionality.
@@ -131,9 +131,9 @@ Before implementing a feature:
 
 The authoritative project state is stored in:
 
-- `docs/roadmap.md`
-- `docs/progress.md`
-- `docs/decisions.md`
+- `.opencode/context/roadmap.md`
+- `.opencode/context/progress.md`
+- `.opencode/context/decisions.md`
 
 When starting work on a new session, use these files to understand
 the current state of the project.

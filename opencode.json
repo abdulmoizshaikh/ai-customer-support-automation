@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "extensions": [".ts", ".js", ".json", ".md"]
+    }
+  },
+  "lsp": {
+    "typescript": {}
+  },
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**", "coverage/**"]
+  },
+  "instructions": ["AGENTS.md", ".opencode/context/roadmap.md", ".opencode/context/progress.md", ".opencode/context/decisions.md"]
+}
