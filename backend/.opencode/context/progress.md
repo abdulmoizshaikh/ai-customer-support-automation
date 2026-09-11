@@ -67,6 +67,20 @@
 - [x] `REFUND_AUTO_LIMIT` is currently read by **no code** — confirmed again at the end of Phase 7 (decision engine reads only `AUTO_REFUND_THRESHOLD`, grep verified). Removal candidate for a config cleanup pass; left in place for now.
 - [x] Re-verified at the end of Phase 7 that no config consumer reads the legacy var.
 
+### Phase 9 — hardening, observability, and E2E verification
+
+- [x] **Admin test helper.** `AdminModule` (`POST /admin/seed-test-order`, `@Roles(Role.ADMIN)`): creates a fresh AUTO_REFUND-eligible order (defaults amount 75, `deliveredDaysAgo` 2, customer `muhammad@example.com`; optional DTO overrides). Numeric string order ids (`MAX(id::bigint)` on `^[0-9]+$` → next). Verified live: no token → `401`, agent → `403`, admin → `201 {"orderId":"791","amount":75,...}` (and custom `{"amount":60}` → `792`). _Bug found + fixed during verification:_ `@Body() dto` is `undefined` for a body-less request — now `@Body() dto: SeedTestOrderDto = {}`.
+- [x] **Retry endpoint.** `POST /tickets/:id/retry` (`@Roles(Role.ADMIN)`; class-level `@Public()` moved to the three public methods so auth guards still apply to everything else). `TicketService.retryFailedTicket`: 404 when missing, `400 "Ticket is not FAILED"` otherwise. Branching on `!ticket.intent`: re-runs classification onward ∧ re-runs RAG + re-derives the decision from the **latest committed `DECISION_MADE` audit** (`decisionFromAudit`) ∧ re-runs Phase 4/5, reusing committed side effects (`orderId = refund?.orderId ?? orderId`). New audits `TICKET_RETRY_SUCCEEDED` (`{via:'retry', fromStatus:'FAILED'}`) and `TICKET_RETRY_FAILED` (`{error}`); retry failure returns a FAILED `ProcessResult` (no throw).
+- [x] **Rate limiting.** `@nestjs/throttler` 6.5.0 with `--legacy-peer-deps` (its peer range tops out at Nest ≤11; no v12 release — this is a deliberate, documented deviation, runtime-verified). `ThrottlerModule.forRoot(throttlerConfig)` (`src/common/throttle/throttler-config.ts`, default ttl 60s / limit 60 per IP) in `AppModule`; `ThrottlerGuard` registered via `APP_GUARD` **after** `JwtAuthGuard`/`RolesGuard` in `AuthModule`. `@Throttle` on `POST /auth/login` (10/min), `POST /auth/register` (5/min), `POST /tickets` (20/min). Not applied to `/admin`, `/approvals`, `/analytics`. Verified: rapid logins → `9×200` then `429` three times (limit 10/min per IP, budget shared with earlier logins in the same window).
+- [x] **Analytics.** `AnalyticsModule` → `GET /analytics` (`@Roles(AGENT, ADMIN)`). Shape: `tickets {total,resolved,waitingApproval,failed,open}`, `automation {automatedCount,escalatedCount,rejectedCount,automationRate(4dp)}`, `approvals {pending,approved,rejected}`, `refunds {count,totalAmount,currency}`, `ai {averageConfidence,providerCounts}`. Implemented with `$queryRawRaw` over `"AuditLog"` (`metadata->>'action'`, `AVG((metadata->>'confidence')::float)`); empty DB → `0`/`0%` (never NaN). Verified live (agent token): tickets `{total:1,resolved:1}`, automation `{automatedCount:1,escalatedCount:0,rejectedCount:0,automationRate:1}`, refunds `{count:1,totalAmount:75,currency:"USD"}`, ai `{averageConfidence:0.95,providerCounts:{"mock":1}}`; no token → `401`.
+- [x] **Real-DB e2e suite.** `test/e2e/ticket-workflow.e2e-spec.ts` + `npm run test:e2e` (`vitest run --config ./vitest.config.e2e.ts`; dedicated config — include only `test/e2e/**/*.e2e-spec.ts`, excludes the legacy `test/app.e2e-spec.ts`). Boots the feature modules against the live PostgreSQL with **mock providers forced in `beforeAll`** (the earlier run leaked into real Ollama via `AI_PROVIDER=openai` → multi-second runs and P2003 from cleanup racing in-flight classifications). Cleanup: wipes Ticket/Refund/ApprovalRequest/AuditLog + test-created Orders (`id NOT IN` seed set) and resets seed orders to `DELIVERED/refundedAt null` (seed customers/users/knowledge untouched) — before each test and again in `afterAll`. 6 cases: AUTO_REFUND (9-event trace, `$100`), REQUEST_HUMAN_APPROVAL (8 events incl. `APPROVAL_REQUESTED`, never a `REFUND_CREATED` — response-generation closers always fire), outside-window REJECT, ORDER_NOT_FOUND, full human approval via `ApprovalsService.approve()`, ORDER_ALREADY_REFUNDED on re-submit. **6/6 pass.** `npm test` stays isolated at **54/7** (unit config `include: ['**/*.spec.ts']` doesn't match `*.e2e-spec.ts`).
+- [x] **RAG similarity investigation (report only, no behavior change).** Reproduced the low-score observation end-to-end with the mock embedding provider against the stored chunk:
+  - Self-similarity of the stored chunk embedding = **1.0000** → the chunk was embedded by the **mock** provider (normalized, `norm²=1`), so the earlier real-LLM run's `topScore -0.0114` was a **cross-provider mismatch** artifact — the query was embedded by the OpenAI-compatible provider (nomic) against a mock-embedded chunk; different vector spaces → near-orthogonal/negative cosine.
+  - Within the same provider the short-query penalty is real but modest: terse "order damaged refund" → `0.3765` vs. exact policy sentence `0.7123` vs. policy-vocabulary paraphrase `0.5999`.
+  - No vector index on `KnowledgeChunk` (only btree pkey + `documentId` idx) — fine at 1 chunk, add HNSW (`vector_hnsw_cosine_ops`, 768-dim) when the KB grows.
+  - Recommendation: (b)+(c) — keep retrieval; store the embedding **model** alongside chunks and reject/flag cross-model cosine results (production contract: query vectors must come from the same model as stored vectors); optionally expand short terse queries into policy vocabulary for recall. Chunk re-sizing (a) deferred. Note appended to the Key decisions + open Phase 2 follow-up below.
+- [x] Full verification after the controller fix: `npm run build` exit 0; `npm test` **54/7**; `npm run test:e2e` **6/1**; `npm run lint` clean (only the 2 pre-existing `src/orders/` warnings); live curls showed `405`? — no: admin `401/403/201`, AUTO_REFUND ticket on seeded order `791`, analytics `200`, rate-limit `429`. `.env` restored to `mock` (`AI_PROVIDER=mock`, `EMBEDDING_PROVIDER=mock`; `.env.mock-backup` source of truth, `.env.openai-backup` for live-LLM runs).
+
 ### Key technical decisions
 
 - Prisma **7 stable** with the driver adapter (not Prisma 8 RC contract-based setup).
@@ -100,6 +114,33 @@
 
   This keeps DB locks off the LLM latency path and is the correct shape for production. New audit event `TICKET_FAILED` fires only on failure; success trace adds `ORDER_STATUS_TRANSITIONED` (Phase 8), making the AUTO_REFUND path 9 events.
 
+- `@nestjs/throttler` 6.5.0 is the last release and peers to Nest **≤11**; installed with `--legacy-peer-deps` as a documented, runtime-verified deviation (Nest 12 has no throttler release yet).
+- Throttler settings are centralized in `src/common/throttle/throttler-config.ts`; the guard is **globally registered after** the auth guards so authenticated low-volume routes are not double-counted against public abuse, and `@Throttle` overrides keep the defaults applied elsewhere.
+- `vitest.config.e2e.ts` (dedicated e2e config) replaces the previous ad-hoc `**/*.e2e-spec.ts` run — too broad (it pulled in the legacy `test/app.e2e-spec.ts` that boots the full app, including the Observe worker). The e2e suite forces `AI_PROVIDER=mock`/`EMBEDDING_PROVIDER=mock` in `beforeAll` _before_ compiling the test module so provider factories read the mock mode regardless of `.env`.
+- RAG embedding-model consistency is a production contract: cosine scores are only meaningful when stored and query vectors come from the **same embedding model** (see the investigation note; the stored `refund-policy.md` chunk is a normalized mock embedding).
+
 ## Next Step
 
-Phase 9 — Production quality (error handling hardening, retry, rate limiting, Dockerized app). Phase 2 follow-up (live LLM verify via `AI_CHAT_MODEL=qwen2.5:7b` + Ollama) remains open.
+Phase 9 — Dockerized app (only the DB is containerized today) remains. Open follow-ups: RAG embedding **model tagging** per document + query-side model enforcement (see RAG investigation above), optional HNSW vector index when the KB grows, short-query expansion for higher recall, and the Phase 2 live-LLM verification (`AI_CHAT_MODEL=qwen2.5:7b` + Ollama, re-run with freshly seeded test orders from `/admin/seed-test-order`).
+
+## Known issues
+
+- Cross-provider embedding mismatch: knowledge chunks ingested with one
+  embedding provider (mock or a specific model) are incomparable to queries
+  embedded with a different provider/model. Fix: store embedding model name
+  per chunk; filter searches by matching model; re-embed on model change.
+
+- No vector index on KnowledgeChunk.embedding. Fine at current scale
+  (single-digit chunks), but will degrade to sequential scan at 1000+
+  chunks. Consider HNSW when the knowledge base grows.
+
+## E2E test strategy
+
+test/e2e/ticket-workflow.e2e-spec.ts forces AI_PROVIDER=mock and
+EMBEDDING_PROVIDER=mock in beforeAll, ignoring .env. This makes the test
+deterministic regardless of local .env state and safe for CI without
+Ollama.
+
+Uses a real PostgreSQL connection (the same DATABASE_URL as the app) so
+schema and transactions are exercised for real. Cleans ticket-specific
+tables between tests, leaves seed data (customers, docs, users) intact.

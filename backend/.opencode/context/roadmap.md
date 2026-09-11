@@ -59,10 +59,13 @@
 - [x] Order status transitions (`REFUNDED` + `refundedAt`)
 - [x] Approval workflow (`/approvals` list/approve/reject, schema present)
 
-## Phase 9 — Production Quality
+## Phase 9 — Production Quality (in progress)
 
-- [ ] Error handling hardening
-- [ ] Retry handling
+- [x] Error handling hardening (`TICKET_FAILED` audit + `markFailed` short-tx recovery path)
+- [x] Retry handling (`POST /tickets/:id/retry`, ADMIN-only; idempotent by ticketId — re-runs classification or resumes from committed side effects)
 - [x] Authentication guards live (`JwtAuthGuard` + `RolesGuard` via `APP_GUARD`, `@Public()` opt-outs)
-- [ ] Rate limiting
+- [x] Rate limiting (`@nestjs/throttler` 6.5.0 via `--legacy-peer-deps` — latest peers only to Nest ≤11; `ThrottlerGuard` after auth guards; default 60 req/min + login 10, register 5, tickets-post 20)
+- [x] Admin test helpers (`AdminModule` — `POST /admin/seed-test-order`, ADMIN-only, creates AUTO_REFUND-eligible orders for LLM/e2e verifications)
+- [x] Analytics (`GET /analytics`, AGENT/ADMIN — tickets, automation, approvals, refunds, AI provider stats)
+- [x] Real-DB e2e suite (`npm run test:e2e` — 6 cases, `vitest.config.e2e.ts`, mock providers forced, isolated cleanup)
 - [ ] Dockerized app (only DB via Docker today)

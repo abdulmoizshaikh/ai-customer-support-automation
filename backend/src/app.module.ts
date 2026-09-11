@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { createObserveModule } from '@nestjs/observe';
+import { throttlerConfig } from './common/throttle/throttler-config.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -15,6 +17,8 @@ import { DecisionModule } from './decision/decision.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { TicketModule } from './tickets/ticket.module.js';
 import { ApprovalsModule } from './approvals/approvals.module.js';
+import { AdminModule } from './admin/admin.module.js';
+import { AnalyticsModule } from './analytics/analytics.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -28,6 +32,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       serviceId: 'backend',
     }),
     PrismaModule,
+    ThrottlerModule.forRoot(throttlerConfig),
     AuthModule,
     CustomersModule,
     OrdersModule,
@@ -40,6 +45,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AuditModule,
     TicketModule,
     ApprovalsModule,
+    AdminModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
