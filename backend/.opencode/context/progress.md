@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-**Phases 1–6 complete; Phases 7–9 pending**
+**Phases 1–7 complete; Phases 8–9 pending**
 
 ### Completed
 
@@ -12,7 +12,7 @@
 - [x] Prisma 7 stable + driver adapter (`@prisma/adapter-pg` / `PrismaPg`), classic `schema.prisma`
 - [x] 10-table schema + migrations applied (`init`, `knowledge_filename_unique`, `reconcile_embedding_dims_768`)
 - [x] Seed data loaded — 3 customers, 5 orders (123/124/125, 456, 789), 2 staff users (admin + agent), 3 knowledge docs
-- [x] `CustomersModule`, `OrdersModule`, `RefundsModule`, `UsersModule`, `AuthModule`, `PrismaModule`, `EmbeddingsModule`, `RagModule`, `DecisionModule` all wired into `AppModule`
+- [x] `CustomersModule`, `OrdersModule`, `RefundsModule`, `UsersModule`, `AuthModule`, `PrismaModule`, `EmbeddingsModule`, `RagModule`, `DecisionModule`, `AuditModule`, `TicketModule` all wired into `AppModule`
 - [x] `npm run build` passes (exit 0); unit tests pass (Vitest — 38 cases across 5 files)
 - [x] End-to-end verification of `/orders/:id` (literal curl output):
   - `GET /orders/123` → `200` body `amount: "750"`
@@ -34,6 +34,18 @@
   - `docker exec ... SELECT COUNT(*) FROM "KnowledgeChunk"` → `1`
   - `GET /knowledge/search?q=damaged order refund&topK=3` → `200` `[{...,"title":"Refund Policy","filename":"refund-policy.md","score":0.3726...}]`
 - [x] Decision engine `DecisionModule` (`src/decision/`) — pure, dependency-free `evaluateDecision` (no Prisma/HTTP/AI): intent gate → confidence gate → order lookup → delivered check → refund window → amount threshold → AUTO_REFUND / REQUEST_HUMAN_APPROVAL / REJECT_REFUND / ORDER_NOT_FOUND / NEEDS_HUMAN_REVIEW / NO_ACTION. `DecisionService` thin wrapper (env policy or override). Scenario-table unit tests (16 cases) cover boundary rules (exactly at 30 days/500/0.85 vs ±1 unit) and gate ordering; **38 tests total pass** across 5 files
+- [x] Ticket workflow `TicketModule` (`src/tickets/`) — `POST /tickets`, `GET /tickets/:id`, `GET /tickets`. `TicketService.processTicket` orchestrates: `ticket.create` → AI classify (`AiService`) → RAG search (chunks into response prompt) → order lookup → `DecisionService` → side effect (auto refund via `tx.refund` idempotent `findUnique`-then-create + `order` → `REFUNDED`, or `approvalRequest.create` PENDING + status `WAITING_APPROVAL`) → customer response → status `RESOLVED`/`FAILED`. All work inside a `$transaction` (audit log rows included); ticket row created **before** the tx so the FAILED fallback persists on rollback
+- [x] `AuditModule` (`src/audit/`) — `AuditService.record(ticketId, event, actor, metadata, db?)`; maps `customer`/`agent` → `HUMAN`, `ai` → `AI`, `system` → `SYSTEM`; accepts an injected tx sink (Prisma 7 exports no `TransactionClient` type — untyped cast)
+- [x] AI response generation — `AiProvider.generateCustomerResponse(product { decision, context })` with deterministic `ResponseContext`; mock: 6 templates keyed by `decision.action`; OpenAI-compatible: temperature 0.2, RAG policy chunks placed in prompt, trimmed text
+- [x] End-to-end verification of `/tickets` (literal curl output, mock providers):
+  - `POST {"message":"My order #124 arrived damaged. I want a refund."}` → `201` `decision.action: "AUTO_REFUND"`, `refund.status: "COMPLETED"`, `ticket.status: "RESOLVED"`
+  - `POST {"message":"Where is my order #456?"}` → `201` `decision.action: "NO_ACTION"` / `reason: "INTENT_NOT_REFUND"`, `ticket.status: "RESOLVED"`
+  - `POST {"message":"My order #123 arrived damaged. I want a refund."}` → `201` `decision.action: "REQUEST_HUMAN_APPROVAL"` / `reason: "AMOUNT_EXCEEDS_AUTO_THRESHOLD"`, `approval.status: "PENDING"`, `ticket.status: "WAITING_APPROVAL"`
+  - `POST {"message":"My order #125 arrived damaged. I want a refund."}` → `201` `decision.action: "REJECT_REFUND"` / `reason: "OUTSIDE_REFUND_WINDOW"`, `ticket.status: "RESOLVED"`
+  - `POST {"message":"My order #99999 arrived damaged. I want a refund."}` → `201` `decision.action: "ORDER_NOT_FOUND"`, `ticket.status: "RESOLVED"`
+  - `GET /tickets/:id` trace (auditLogs asc): `TICKET_CREATED → AI_CLASSIFICATION → RAG_RETRIEVED → ORDER_LOOKED_UP → DECISION_MADE → REFUND_CREATED → RESPONSE_GENERATED → TICKET_RESOLVED`
+  - DB: exactly 1 `Refund` (order 124, COMPLETED), exactly 1 `ApprovalRequest` (order 123, REFUND/PENDING, 750.00), 5 tickets, 37 audit rows
+- [x] `npm run build` passes (exit 0); unit tests pass (Vitest — **44 cases across 6 files**, +6 `ticket.service.spec` scenarios); lint clean (only 2 pre-existing `src/orders/` warnings)
 
 ### Pending / Phase 3 follow-up
 
@@ -43,8 +55,8 @@
 
 ### Config hygiene (deferred)
 
-- [ ] `REFUND_AUTO_LIMIT` is currently read by **no code** — candidate for removal once Phase 7 confirms the ticket workflow reads only `AUTO_REFUND_THRESHOLD`.
-- [ ] Re-verify at the end of Phase 7 that no config consumer reads the legacy var.
+- [x] `REFUND_AUTO_LIMIT` is currently read by **no code** — confirmed again at the end of Phase 7 (decision engine reads only `AUTO_REFUND_THRESHOLD`, grep verified). Removal candidate for a config cleanup pass; left in place for now.
+- [x] Re-verified at the end of Phase 7 that no config consumer reads the legacy var.
 
 ### Key technical decisions
 
@@ -57,7 +69,13 @@
 - `POST /knowledge` is **idempotent by filename** (replaces doc + cascaded chunks in a transaction) — documented contract in `RagService.ingestDocument`.
 - Mock embedding provider uses **token-hash bag-of-words** (deterministic, normalized) so related content gets positive cosine scores — deviate from the original pseudo-random spec to satisfy `score > 0` verification; all 5 mock provider tests unchanged.
 - Decision engine reads `AUTO_REFUND_THRESHOLD` (now in `.env`); legacy `REFUND_AUTO_LIMIT` left in place — see "Config hygiene (deferred)".
+- Prisma 7 has **no exported `Prisma.TransactionClient`** type — `AuditService.record` accepts an untyped `db` sink; TicketService passes the in-tx client so audit rows commit/roll back with the workflow.
+- Decision gate is run against **lowercase** `order.status` (`'delivered'`); Prisma ticket enums (`intent`/`priority`) are stored **uppercase** via `toUpperCase()` at the boundary.
+- `Refund.ticketId` is **already `@unique`** (line 162, "one refund per ticket") — no Phase 7 migration; idempotency is `findUnique`-then-create inside the tx.
+- `processTicket` creates the ticket row **before** `$transaction` (deliberate deviation from the task snippet) so a rolled-back workflow can still persist `status: FAILED`; audit `TICKET_CREATED` remains inside the tx.
+- `TicketController` result interfaces (`ProcessResult`/`RefundResult`/`ApprovalResult`/`TicketResult`) are exported because Nest/TS requires return types of controller methods to be nameable.
+- The only server-log error during Phase 7 verification is the pre-existing `ObserveAgentWorker` telemetry 401 (placeholder credentials) — not a workflow regression.
 
 ## Next Step
 
-Phase 7 — Automation (automatic refund, automatic response, human escalation, audit logging) + wire the ticket workflow (AI classify → RAG retrieval → decision engine → action). Phase 4 follow-ups (support-ticket API, live LLM verify) remain open.
+Phase 8 — Business rules (refund eligibility wrinkle checks, order status transitions, approval workflow execution: resolving PENDING approval requests). Phase 2 follow-ups (live LLM verify via `AI_CHAT_MODEL=qwen2.5:7b` + Ollama) remain open; Phase 3 auth guards (JwtAuthGuard/RolesGuard global registration + 401 verification) still pending.

@@ -12,6 +12,8 @@ import { AiModule } from './ai/ai.module.js';
 import { EmbeddingsModule } from './embeddings/embeddings.module.js';
 import { RagModule } from './rag/rag.module.js';
 import { DecisionModule } from './decision/decision.module.js';
+import { AuditModule } from './audit/audit.module.js';
+import { TicketModule } from './tickets/ticket.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -34,6 +36,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     EmbeddingsModule,
     RagModule,
     DecisionModule,
+    AuditModule,
+    TicketModule,
   ],
   controllers: [AppController],
   providers: [AppService],

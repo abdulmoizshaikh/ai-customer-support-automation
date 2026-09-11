@@ -26,7 +26,7 @@
 ## Phase 4 — Support Tickets & AI Classification
 
 - [x] AI provider abstraction (`src/ai/`, mock default + OpenAI-compatible via `fetch`) with zod-validated structured classification + confidence
-- [ ] Support ticket API
+- [x] Support ticket API
 - [ ] Verify against a live local LLM (provider wired, `AI_CHAT_MODEL=qwen2.5:7b`)
 
 ## Phase 5 — RAG ✅
@@ -45,12 +45,12 @@
 - [ ] Add safety rules
 - [x] DecisionModule wired (no controller — exposed via ticket workflow in Phase 7)
 
-## Phase 7 — Automation
+## Phase 7 — Automation ✅
 
-- [ ] Automatic refund
-- [ ] Automatic response
-- [ ] Human escalation
-- [ ] Audit logging
+- [x] Automatic refund
+- [x] Automatic response
+- [x] Human escalation
+- [x] Audit logging
 
 ## Phase 8 — Business Rules
 
