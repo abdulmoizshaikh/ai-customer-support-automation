@@ -28,6 +28,40 @@ A locally-hosted AI automation system that classifies customer support tickets, 
 
 ---
 
+# Part 0 — Demo (Screenshots)
+
+The React dashboard (`http://localhost:5173`) — customer ticket submission, agent dashboard with execution traces, approval queue, and analytics.
+
+### Customer ticket submission
+
+`SubmitTicket` page showing an order-status inquiry being processed end-to-end:
+
+### Order status
+
+![Order status inquiry](demo/submit-where-is-my-order.png)
+
+### Policy Q&A
+
+![Return policy inquiry](demo/Submit-what-is-return-policy.png)
+
+### Agent dashboard
+
+Ticket list with intent, priority, and status:
+
+![Dashboard — ticket list](demo/dashboard-tickets.png)
+
+Ticket detail with the full AI execution trace (classification → RAG → decision → action → response):
+
+![Ticket detail — execution trace](demo/ticket-detail.png)
+
+### Analytics
+
+Automation rate, escalation counts, and AI confidence breakdown:
+
+![Analytics](demo/Analytics.png)
+
+---
+
 # Part 1 — Business Context
 
 ## 1. Why This Project Exists
