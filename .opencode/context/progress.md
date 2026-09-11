@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-**Phases 1–3 complete; Phases 4–9 pending**
+**Phases 1–4 complete; Phases 5–9 pending**
 
 ### Completed
 
@@ -20,12 +20,22 @@
   - `GET /orders/999` → `404` body `{"message":"Order 999 not found","error":"Not Found","statusCode":404}`
 - [x] `.env` + `.env.example` with DATABASE_URL, JWT secrets/TTLs, `AI_PROVIDER=mock`, business-rule limits
 - [x] Linting (oxlint), formatting (Prettier), Observability (NestJS Observe, placeholder credentials)
+- [x] `AiModule` (`/ai/classify`) — provider selection via `AI_PROVIDER` env var, default **mock** (no external services). zod-validated `TicketClassification` contract, OpenAI-compatible provider via plain `fetch` (reads `AI_BASE_URL` / `AI_API_KEY` / `AI_CHAT_MODEL`)
+- [x] Mock provider unit tests (Vitest, deterministic, no network) — 8 cases pass; build exit 0
+- [x] End-to-end verification of `/ai/classify` (literal curl output):
+  - `POST {"message":"My order #123 arrived damaged. I want a refund."}` → `201` body `{"intent":"damaged_order","orderId":"123","priority":"high","confidence":0.95}`
+  - `POST {"message":"Where is my order #456?"}` → `201` body `{"intent":"order_status","orderId":"456","priority":"medium","confidence":0.9}`
 
 ### Pending / Phase 3 follow-up
 
 - [ ] Register `JwtAuthGuard` globally via `APP_GUARD` in `AuthModule`, with a `@Public()` decorator opt-out for `/auth/login` and `/auth/register`.
 - [ ] Register `RolesGuard` globally after `JwtAuthGuard` so `@Roles(...)` metadata is actually enforced.
 - [ ] Verify `GET /orders/:id` returns 401 without a JWT once guards are live, then re-verify with a JWT from `POST /auth/login`.
+
+### Pending / Phase 5 pre-work
+
+- [ ] Reconcile `EMBEDDING_DIMS` with `AI_EMBED_MODEL=nomic-embed-text` (768-dim), OR switch to an embedding model that produces 1536 dims.
+- [ ] Migrate `KnowledgeChunk.embedding` to the correct dimension before ingesting any documents (it is currently `Unsupported("vector(1536)")`).
 
 ### Key technical decisions
 
@@ -37,4 +47,4 @@
 
 ## Next Step
 
-Phase 4 — Support tickets & AI classification (wire the local LLM / mock provider and a `Ticket` API on the existing `Ticket` model).
+Phase 5 — RAG (reconcile embedding dims first, then chunk docs, generate/store vectors, implement retrieval). Support-ticket workflow wiring of the AI call lands in a later phase.

@@ -25,10 +25,9 @@
 
 ## Phase 4 — Support Tickets & AI Classification
 
+- [x] AI provider abstraction (`src/ai/`, mock default + OpenAI-compatible via `fetch`) with zod-validated structured classification + confidence
 - [ ] Support ticket API
-- [ ] Connect local LLM (mock provider primed, `AI_PROVIDER=mock`)
-- [ ] Define ticket categories / intent detection
-- [ ] Structured classification + confidence score
+- [ ] Verify against a live local LLM (provider wired, `AI_CHAT_MODEL=qwen2.5:7b`)
 
 ## Phase 5 — RAG
 

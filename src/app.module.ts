@@ -8,6 +8,7 @@ import { CustomersModule } from './customers/customers.module.js';
 import { OrdersModule } from './orders/orders.module.js';
 import { RefundsModule } from './refunds/refunds.module.js';
 import { UsersModule } from './users/users.module.js';
+import { AiModule } from './ai/ai.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -26,6 +27,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     OrdersModule,
     RefundsModule,
     UsersModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
