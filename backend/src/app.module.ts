@@ -27,9 +27,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     // Distributed tracing, auto-correlated logs, request/job metrics, error
     // telemetry, alarms, and more — out of the box. Sign up at https://observe.nestjs.com
     ObserveModule.forRoot({
-      appKey: 'YOUR_APP_KEY',
-      appSecret: 'YOUR_APP_SECRET',
-      serviceId: 'backend',
+      appKey: process.env.OBSERVE_APP_KEY ?? 'YOUR_APP_KEY',
+      appSecret: process.env.OBSERVE_APP_SECRET ?? 'YOUR_APP_SECRET',
+      serviceId: process.env.SERVICE_ID ?? 'cats-app',
     }),
     PrismaModule,
     ThrottlerModule.forRoot(throttlerConfig),
