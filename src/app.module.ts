@@ -9,6 +9,8 @@ import { OrdersModule } from './orders/orders.module.js';
 import { RefundsModule } from './refunds/refunds.module.js';
 import { UsersModule } from './users/users.module.js';
 import { AiModule } from './ai/ai.module.js';
+import { EmbeddingsModule } from './embeddings/embeddings.module.js';
+import { RagModule } from './rag/rag.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -28,6 +30,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     RefundsModule,
     UsersModule,
     AiModule,
+    EmbeddingsModule,
+    RagModule,
   ],
   controllers: [AppController],
   providers: [AppService],

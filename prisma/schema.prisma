@@ -227,9 +227,9 @@ model KnowledgeChunk {
   document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   index      Int
   content    String
-  // pgvector dimension (OpenAI compatible default: 1536).
+  // pgvector dimension (nomic-embed-text: 768).
   // Managed via raw SQL (see migrations) — not via native Prisma vector support.
-  embedding  Unsupported("vector(1536)")?
+  embedding  Unsupported("vector(768)")?
   createdAt  DateTime          @default(now())
 
   @@index([documentId])

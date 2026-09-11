@@ -5,7 +5,7 @@
 - [x] Create repository
 - [x] Setup backend — NestJS 12, TypeScript 6, ESM
 - [x] Setup database — PostgreSQL 16 via Docker Compose (`pgvector/pgvector:pg16`, container `ai-support-postgres`)
-- [x] Define schema (`prisma/schema.prisma`, 10 tables) + apply migrations (`init`, `knowledge_filename_unique`)
+- [x] Define schema (`prisma/schema.prisma`, 10 tables) + apply migrations (`init`, `knowledge_filename_unique`, `reconcile_embedding_dims_768`)
 - [x] Seed database (3 customers, 5 orders, 2 staff users, 3 knowledge docs)
 - [x] Observability (NestJS Observe), lint (oxlint), format (Prettier), tests (Vitest)
 
@@ -29,13 +29,13 @@
 - [ ] Support ticket API
 - [ ] Verify against a live local LLM (provider wired, `AI_CHAT_MODEL=qwen2.5:7b`)
 
-## Phase 5 — RAG
+## Phase 5 — RAG ✅
 
-- [ ] Chunk knowledge documents (schema + seed present)
-- [ ] Generate embeddings (pgvector column exists via raw SQL)
-- [ ] Store vectors
-- [ ] Implement retrieval
-- [ ] Add context to LLM
+- [x] Chunk knowledge documents (schema + seed present)
+- [x] Generate embeddings (pgvector column exists via raw SQL)
+- [x] Store vectors
+- [x] Implement retrieval
+- [ ] Add context to LLM (Phase 6/7 wiring)
 
 ## Phase 6 — AI Decision Engine
 
