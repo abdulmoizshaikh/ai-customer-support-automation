@@ -15,7 +15,8 @@ Built as a demonstration of **real backend automation** (not a chatbot wrapper):
 - [Development Phases](#development-phases)
 - [Directory Layout](#directory-layout)
 - [Running Locally](#running-locally)
-- [Configuration](#configuration)
+- [Backend Configuration](#backend-configuration)
+- [Environment Files](#environment-files)
 - [Verification and Testing](#verification-and-testing)
 - [Real LLM vs Mock Providers](#real-llm-vs-mock-providers)
 - [Key Design Principles](#key-design-principles)
@@ -572,7 +573,7 @@ cd frontend && npm run dev
 
 ---
 
-## Configuration
+## Backend Configuration
 
 All config lives in `.env`. See `.env.example` for the full set.
 
@@ -630,6 +631,317 @@ cp .env.mock-backup .env
 ```
 
 **Never use `sed` to flip providers.** A line-concatenation bug in an earlier session corrupted `CONFIDENCE_THRESHOLD`. The `cp` pattern is deterministic.
+
+---
+
+## Environment Files
+
+The project uses **three `.env` files**, each serving a distinct purpose. They are not redundant — each one is read by a different tool in a different context.
+
+| File | Read by | Purpose |
+|------|---------|---------|
+| `.env` (project root) | `docker compose` | Variable interpolation for `docker-compose.yml` |
+| `backend/.env` | NestJS (host dev mode) | Backend configuration when running `npm run start:dev` locally |
+| `frontend/.env` | Vite (host dev mode) | Frontend build-time variables when running `npm run dev` locally |
+
+All three files are **gitignored**. Each has a corresponding `.env.example` (committed) that documents the required variables.
+
+---
+
+### 1. Root `.env` — Docker Compose Configuration
+
+**Location:** `ai-customer-support/.env`
+
+**Read by:** `docker compose` commands run from the project root.
+
+**Purpose:** Docker Compose performs variable substitution on `docker-compose.yml` at parse time. Every `${VAR}` reference in the compose file is replaced with the value from this file.
+
+**Example variables:**
+
+```env
+POSTGRES_USER=ai_support
+POSTGRES_PASSWORD=ai_support
+POSTGRES_DB=ai_support
+JWT_ACCESS_SECRET=change-me-access
+JWT_REFRESH_SECRET=change-me-refresh
+AI_PROVIDER=mock
+EMBEDDING_PROVIDER=mock
+BACKEND_PORT=3000
+FRONTEND_PORT=5173
+```
+
+**How it flows into containers:**
+
+```yaml
+# docker-compose.yml
+services:
+  backend:
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      AI_PROVIDER: ${AI_PROVIDER}
+```
+
+Compose resolves `${POSTGRES_USER}` etc. from the root `.env` and passes the resolved values into the container's environment.
+
+**Important:** This file is **never read by NestJS or Vite directly**. It only exists for Compose to do its interpolation. The containerized backend never reads `backend/.env` — it receives environment variables from Compose at container start.
+
+**When you use it:**
+
+```bash
+docker compose up --build
+docker compose ps
+docker compose logs backend
+```
+
+---
+
+### 2. `backend/.env` — Backend Development
+
+**Location:** `ai-customer-support/backend/.env`
+
+**Read by:** NestJS when you run the backend on the host (not in Docker).
+
+**Purpose:** Provides all configuration the backend needs during local development. NestJS reads this file via `dotenv` on startup.
+
+**Example variables:**
+
+```env
+DATABASE_URL="postgresql://ai_support:ai_support@localhost:5432/ai_support?schema=public"
+PORT=3000
+JWT_ACCESS_SECRET="..."
+JWT_REFRESH_SECRET="..."
+JWT_ACCESS_TTL="15m"
+JWT_REFRESH_TTL="7d"
+AI_PROVIDER=mock
+AI_BASE_URL=http://localhost:11434/v1
+AI_CHAT_MODEL=qwen2.5:7b
+AI_EMBED_MODEL=nomic-embed-text
+EMBEDDING_DIMS=768
+EMBEDDING_PROVIDER=mock
+REFUND_WINDOW_DAYS=30
+AUTO_REFUND_THRESHOLD=500
+CONFIDENCE_THRESHOLD=0.85
+```
+
+**Key difference from the root `.env`:** the `DATABASE_URL` points to `localhost:5432`, not `postgres:5432`. This is because the host machine reaches the Docker PostgreSQL container through the mapped port, whereas the Docker backend reaches it through the Compose network alias.
+
+**When you use it:**
+
+```bash
+cd backend
+npm run start:dev       # hot-reload dev server
+npm test                # unit tests
+npx prisma migrate dev  # apply migrations in dev
+npx prisma studio       # browse the database
+```
+
+**Why we don't delete it:**
+
+Running the backend on the host is **10–100× faster** than rebuilding a Docker image after each code change. During active development, you'll use this file 90% of the time. Docker mode is for demos, CI, and production-like verification — not the daily edit-test loop.
+
+**Provider snapshots:**
+
+Two additional files exist as deterministic provider-switching helpers:
+
+| File | Purpose |
+|------|---------|
+| `backend/.env.mock-backup` | Copy of `.env` with mock providers (default) |
+| `backend/.env.openai-backup` | Copy of `.env` with real Ollama providers |
+
+Switch with a single command:
+
+```bash
+cp .env.mock-backup .env      # offline, deterministic, fast tests
+cp .env.openai-backup .env    # real qwen2.5:7b + nomic-embed-text
+```
+
+**Never edit these files with `sed`.** A line-concatenation bug in an earlier session corrupted `CONFIDENCE_THRESHOLD`; the `cp` pattern is deterministic.
+
+---
+
+### 3. `frontend/.env` — Frontend Development
+
+**Location:** `ai-customer-support/frontend/.env`
+
+**Read by:** Vite when running the frontend on the host.
+
+**Purpose:** Provides build-time variables for the frontend, prefixed with `VITE_`. Vite exposes them to client code via `import.meta.env`.
+
+**Example variables:**
+
+```env
+# (if used)
+VITE_API_URL=http://localhost:3000
+VITE_ENVIRONMENT=development
+```
+
+**Why this file might be empty or minimal:**
+
+The frontend is designed to use **relative `/api/*` paths** rather than absolute backend URLs. In both dev mode (via the Vite proxy in `vite.config.ts`) and production mode (via the nginx proxy in `nginx.conf`), the prefix `/api` is rewritten and forwarded to the backend.
+
+This means the frontend doesn't need to know the backend's host or port — it just calls `/api/tickets` and lets the proxy handle the rest. As a result, `frontend/.env` may not need any variables at all for a basic setup.
+
+**When you use it:**
+
+```bash
+cd frontend
+npm run dev     # Vite dev server on :5173
+npm run build   # production build
+```
+
+**Why we don't delete it:**
+
+Even if currently unused, the file is a **documented extension point**. Any future feature that needs environment-specific behavior (analytics IDs, feature flags, external API keys) has a clear place to live. Deleting it would force that decision to be made again later.
+
+**Not read by Docker.** The production frontend image serves static files via nginx; runtime environment variables don't apply to the build output.
+
+---
+
+### How the Three Files Interact (Visual)
+
+```text
+DEV MODE (host)                          DOCKER MODE (compose)
+─────────────────                        ─────────────────────
+
+cd backend                               docker compose up
+   │                                        │
+   │ reads                                  │ reads
+   ▼                                        ▼
+backend/.env                             .env (root)
+   │                                        │
+   │ provides                               │ interpolates
+   ▼                                        ▼
+NestJS on :3000                          docker-compose.yml
+                                            │
+cd frontend                                 │ passes via
+   │                                        │ environment:
+   │ reads                                  ▼
+   ▼                                     backend container
+frontend/.env                            frontend container
+   │                                        │
+   │ provides                               │ reads
+   ▼                                        ▼
+Vite on :5173                            container env vars
+                                            │
+                                            ▼
+                                         running services
+```
+
+**No file shadows another.** Each is read by exactly one tool in exactly one mode.
+
+---
+
+### Keeping Them in Sync
+
+Some values appear in more than one file:
+
+| Value | Root `.env` | `backend/.env` |
+|-------|:-----------:|:--------------:|
+| `JWT_ACCESS_SECRET` | ✓ | ✓ |
+| `JWT_REFRESH_SECRET` | ✓ | ✓ |
+| `AI_PROVIDER` | ✓ | ✓ |
+| `POSTGRES_USER` / `PASSWORD` / `DB` | ✓ | (via `DATABASE_URL`) |
+
+When you change a shared value (e.g., rotate the JWT secret), update **both files**. There's no automatic sync; the duplication is a consequence of how Compose and host-based tools consume configuration.
+
+**Sync checklist when changing shared values:**
+
+```bash
+# 1. Update root .env
+vim .env
+
+# 2. Update backend/.env with the same value
+vim backend/.env
+
+# 3. Update the backup snapshots
+cp backend/.env backend/.env.mock-backup   # (edit providers back if needed)
+```
+
+For a solo project, this is manageable. For a team, consider a secret manager (1Password CLI, Doppler, AWS Secrets Manager) with a single source of truth.
+
+---
+
+### Which File Do I Edit?
+
+| Situation | File to edit |
+|-----------|-------------|
+| Changing the port the frontend runs on (Docker) | root `.env` → `FRONTEND_PORT` |
+| Changing JWT TTL for local dev | `backend/.env` → `JWT_ACCESS_TTL` |
+| Rotating the JWT secret | Both root `.env` AND `backend/.env` |
+| Switching AI providers for tests | `cp backend/.env.mock-backup backend/.env` |
+| Switching AI providers for real-LLM verification | `cp backend/.env.openai-backup backend/.env` |
+| Adding a Vite environment variable | `frontend/.env` |
+| Changing DB credentials | Root `.env` (affects container) AND `backend/.env` (affects host dev) |
+
+---
+
+### Why We Don't Consolidate to a Single `.env`
+
+Tempting, but it doesn't work cleanly:
+
+- **Root `.env` uses container hostnames** (`postgres:5432`), while dev mode needs hostnames reachable from the host machine (`localhost:5432`). One file can't serve both.
+- **Compose reads its `.env` at parse time**, before any container starts. NestJS reads its `.env` at application startup. Different lifecycles.
+- **`VITE_` prefixed variables are baked into the frontend build**, not read at runtime. Different mechanics entirely.
+- **`.dockerignore` excludes `backend/.env`** from the image, so the containerized backend can't read it even if we wanted it to.
+
+The three-file pattern is the idiomatic solution for projects that support both Docker and host-based development. It's verbose but explicit — every tool reads the file it expects, and there's no ambiguity about which variables apply where.
+
+---
+
+### Security Note
+
+All three files are **gitignored**. Only the `.env.example` templates are committed.
+
+**Verify before pushing:**
+
+```bash
+# Should return nothing (no tracked .env files)
+git ls-files | grep -E "^\.env$|/\.env$"
+
+# Should list the .example files (templates ARE tracked)
+git ls-files | grep "\.env\.example"
+```
+
+If a real `.env` ever gets committed accidentally:
+
+```bash
+git rm --cached path/to/.env
+git commit -m "chore: remove accidentally committed .env"
+# Rotate any secrets that were exposed
+```
+
+The JWT secrets in this project are placeholders (`change-me-access`, `change-me-refresh`). For production, replace them with long random strings:
+
+```bash
+openssl rand -base64 48
+```
+
+---
+
+### Quick Reference Card
+
+| Question | Answer |
+|----------|--------|
+| Docker is broken — which file do I check? | root `.env` |
+| NestJS can't connect to the DB in dev — which file? | `backend/.env` |
+| Frontend can't reach the API — which file? | Neither. Check `vite.config.ts` (dev) or `nginx.conf` (Docker) |
+| I want real LLM for manual testing — which file? | `cp backend/.env.openai-backup backend/.env` |
+| I want offline tests to run fast — which file? | `cp backend/.env.mock-backup backend/.env` |
+| I want to change the DB password — which files? | Root `.env` AND `backend/.env` |
+| I forgot which env var I set — where do I look? | Check all three; the tables above tell you which tool owns which var |
+
+---
+
+### Summary
+
+Three `.env` files, three responsibilities:
+
+- **Root `.env`** → Compose interpolation for Docker mode
+- **`backend/.env`** → Backend host development (fast iteration loop)
+- **`frontend/.env`** → Frontend host development (Vite build-time vars)
+
+They don't conflict. They aren't redundant. Each is read by exactly one tool in exactly one context. Keeping all three is the standard pattern for projects that support both local development and containerized deployment.
 
 ---
 
