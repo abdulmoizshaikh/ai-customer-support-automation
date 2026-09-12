@@ -4,6 +4,33 @@ NestJS + Prisma 7 + PostgreSQL (pgvector) backend for the AI customer support au
 
 This document is for developers working on the **backend codebase**. For the full-project overview (business context, architecture, deployment), see the [root README](../README.md).
 
+---
+
+## Table of Contents
+
+1. [Key Concepts Explained](#key-concepts-explained)
+2. [What This Backend Does](#2-what-this-backend-does)
+3. [Prerequisites](#3-prerequisites)
+4. [Quick Start](#4-quick-start)
+5. [Project Structure](#5-project-structure)
+6. [Architecture Overview](#6-architecture-overview)
+7. [Module Breakdown](#7-module-breakdown)
+8. [The Ticket Workflow (Core Orchestration)](#8-the-ticket-workflow-core-orchestration)
+9. [Data Model](#9-data-model)
+10. [Environment Variables](#10-environment-variables)
+11. [Development Workflow](#11-development-workflow)
+12. [Testing](#12-testing)
+13. [Database Operations](#13-database-operations)
+14. [AI Providers and Switching](#14-ai-providers-and-switching)
+15. [Authentication and Authorization](#15-authentication-and-authorization)
+16. [Coding Conventions](#16-coding-conventions)
+17. [Common Tasks](#17-common-tasks)
+18. [Debugging Guide](#18-debugging-guide)
+19. [Known Issues and Gotchas](#19-known-issues-and-gotchas)
+20. [Contributing](#20-contributing)
+
+---
+
 ## Key Concepts Explained
 
 Before diving into the code, here are the core concepts this backend is built on. Understanding these will make every module click faster.
@@ -491,31 +518,6 @@ If the refund rolls back, so does the audit. **No false positives.**
 | **Auditable Execution Trace** | Every ticket produces a structured, queryable, timestamped record of every step, with actors and reasons |
 
 Understanding these four concepts makes the rest of the codebase self-explanatory. Every module either implements one of them or supports them.
-
----
-
-## Table of Contents
-
-1. [Key Concepts Explained](#key-concepts-explained)
-2. [What This Backend Does](#2-what-this-backend-does)
-3. [Prerequisites](#3-prerequisites)
-4. [Quick Start](#4-quick-start)
-5. [Project Structure](#5-project-structure)
-6. [Architecture Overview](#6-architecture-overview)
-7. [Module Breakdown](#7-module-breakdown)
-8. [The Ticket Workflow (Core Orchestration)](#8-the-ticket-workflow-core-orchestration)
-9. [Data Model](#9-data-model)
-10. [Environment Variables](#10-environment-variables)
-11. [Development Workflow](#11-development-workflow)
-12. [Testing](#12-testing)
-13. [Database Operations](#13-database-operations)
-14. [AI Providers and Switching](#14-ai-providers-and-switching)
-15. [Authentication and Authorization](#15-authentication-and-authorization)
-16. [Coding Conventions](#16-coding-conventions)
-17. [Common Tasks](#17-common-tasks)
-18. [Debugging Guide](#18-debugging-guide)
-19. [Known Issues and Gotchas](#19-known-issues-and-gotchas)
-20. [Contributing](#20-contributing)
 
 ---
 
