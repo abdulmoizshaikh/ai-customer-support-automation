@@ -638,11 +638,11 @@ cp .env.mock-backup .env
 
 The project uses **three `.env` files**, each serving a distinct purpose. They are not redundant — each one is read by a different tool in a different context.
 
-| File | Read by | Purpose |
-|------|---------|---------|
-| `.env` (project root) | `docker compose` | Variable interpolation for `docker-compose.yml` |
-| `backend/.env` | NestJS (host dev mode) | Backend configuration when running `npm run start:dev` locally |
-| `frontend/.env` | Vite (host dev mode) | Frontend build-time variables when running `npm run dev` locally |
+| File                  | Read by                | Purpose                                                          |
+| --------------------- | ---------------------- | ---------------------------------------------------------------- |
+| `.env` (project root) | `docker compose`       | Variable interpolation for `docker-compose.yml`                  |
+| `backend/.env`        | NestJS (host dev mode) | Backend configuration when running `npm run start:dev` locally   |
+| `frontend/.env`       | Vite (host dev mode)   | Frontend build-time variables when running `npm run dev` locally |
 
 All three files are **gitignored**. Each has a corresponding `.env.example` (committed) that documents the required variables.
 
@@ -744,10 +744,10 @@ Running the backend on the host is **10–100× faster** than rebuilding a Docke
 
 Two additional files exist as deterministic provider-switching helpers:
 
-| File | Purpose |
-|------|---------|
-| `backend/.env.mock-backup` | Copy of `.env` with mock providers (default) |
-| `backend/.env.openai-backup` | Copy of `.env` with real Ollama providers |
+| File                         | Purpose                                      |
+| ---------------------------- | -------------------------------------------- |
+| `backend/.env.mock-backup`   | Copy of `.env` with mock providers (default) |
+| `backend/.env.openai-backup` | Copy of `.env` with real Ollama providers    |
 
 Switch with a single command:
 
@@ -836,12 +836,12 @@ Vite on :5173                            container env vars
 
 Some values appear in more than one file:
 
-| Value | Root `.env` | `backend/.env` |
-|-------|:-----------:|:--------------:|
-| `JWT_ACCESS_SECRET` | ✓ | ✓ |
-| `JWT_REFRESH_SECRET` | ✓ | ✓ |
-| `AI_PROVIDER` | ✓ | ✓ |
-| `POSTGRES_USER` / `PASSWORD` / `DB` | ✓ | (via `DATABASE_URL`) |
+| Value                               | Root `.env` |    `backend/.env`    |
+| ----------------------------------- | :---------: | :------------------: |
+| `JWT_ACCESS_SECRET`                 |      ✓      |          ✓           |
+| `JWT_REFRESH_SECRET`                |      ✓      |          ✓           |
+| `AI_PROVIDER`                       |      ✓      |          ✓           |
+| `POSTGRES_USER` / `PASSWORD` / `DB` |      ✓      | (via `DATABASE_URL`) |
 
 When you change a shared value (e.g., rotate the JWT secret), update **both files**. There's no automatic sync; the duplication is a consequence of how Compose and host-based tools consume configuration.
 
@@ -864,15 +864,15 @@ For a solo project, this is manageable. For a team, consider a secret manager (1
 
 ### Which File Do I Edit?
 
-| Situation | File to edit |
-|-----------|-------------|
-| Changing the port the frontend runs on (Docker) | root `.env` → `FRONTEND_PORT` |
-| Changing JWT TTL for local dev | `backend/.env` → `JWT_ACCESS_TTL` |
-| Rotating the JWT secret | Both root `.env` AND `backend/.env` |
-| Switching AI providers for tests | `cp backend/.env.mock-backup backend/.env` |
-| Switching AI providers for real-LLM verification | `cp backend/.env.openai-backup backend/.env` |
-| Adding a Vite environment variable | `frontend/.env` |
-| Changing DB credentials | Root `.env` (affects container) AND `backend/.env` (affects host dev) |
+| Situation                                        | File to edit                                                          |
+| ------------------------------------------------ | --------------------------------------------------------------------- |
+| Changing the port the frontend runs on (Docker)  | root `.env` → `FRONTEND_PORT`                                         |
+| Changing JWT TTL for local dev                   | `backend/.env` → `JWT_ACCESS_TTL`                                     |
+| Rotating the JWT secret                          | Both root `.env` AND `backend/.env`                                   |
+| Switching AI providers for tests                 | `cp backend/.env.mock-backup backend/.env`                            |
+| Switching AI providers for real-LLM verification | `cp backend/.env.openai-backup backend/.env`                          |
+| Adding a Vite environment variable               | `frontend/.env`                                                       |
+| Changing DB credentials                          | Root `.env` (affects container) AND `backend/.env` (affects host dev) |
 
 ---
 
@@ -921,15 +921,15 @@ openssl rand -base64 48
 
 ### Quick Reference Card
 
-| Question | Answer |
-|----------|--------|
-| Docker is broken — which file do I check? | root `.env` |
-| NestJS can't connect to the DB in dev — which file? | `backend/.env` |
-| Frontend can't reach the API — which file? | Neither. Check `vite.config.ts` (dev) or `nginx.conf` (Docker) |
-| I want real LLM for manual testing — which file? | `cp backend/.env.openai-backup backend/.env` |
-| I want offline tests to run fast — which file? | `cp backend/.env.mock-backup backend/.env` |
-| I want to change the DB password — which files? | Root `.env` AND `backend/.env` |
-| I forgot which env var I set — where do I look? | Check all three; the tables above tell you which tool owns which var |
+| Question                                            | Answer                                                               |
+| --------------------------------------------------- | -------------------------------------------------------------------- |
+| Docker is broken — which file do I check?           | root `.env`                                                          |
+| NestJS can't connect to the DB in dev — which file? | `backend/.env`                                                       |
+| Frontend can't reach the API — which file?          | Neither. Check `vite.config.ts` (dev) or `nginx.conf` (Docker)       |
+| I want real LLM for manual testing — which file?    | `cp backend/.env.openai-backup backend/.env`                         |
+| I want offline tests to run fast — which file?      | `cp backend/.env.mock-backup backend/.env`                           |
+| I want to change the DB password — which files?     | Root `.env` AND `backend/.env`                                       |
+| I forgot which env var I set — where do I look?     | Check all three; the tables above tell you which tool owns which var |
 
 ---
 
@@ -1088,7 +1088,7 @@ This split is deliberate: the parts that must be correct (business logic) are te
 
 ## License
 
-MIT (or your choice).
+MIT.
 
 ## Credits
 
