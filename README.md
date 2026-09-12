@@ -20,7 +20,7 @@ Built as a demonstration of **real backend automation** (not a chatbot wrapper):
 - [Verification and Testing](#verification-and-testing)
 - [Real LLM vs Mock Providers](#real-llm-vs-mock-providers)
 - [Key Design Principles](#key-design-principles)
-  **Part 6 — Technical Deep Dive**
+- **Part 6 — Technical Deep Dive**
 - [Why RAG and Not Fine-Tuning?](#1-why-rag-and-not-fine-tuning)
 - [Embedding Model Selection](#2-embedding-model-selection--why-nomic-embed-text)
 - [Similarity Metric — Why Cosine](#3-similarity-metric--why-cosine-and-not-dot-product-or-euclidean)
